@@ -51,6 +51,47 @@ class SettingsPage extends StatelessWidget {
             subtitle: Text('当前：$coreVersion'),
             trailing: TextButton(
               onPressed: () async {
+                if (!context.mounted) return;
+                
+                final current = controller.coreVersion;
+                if (current == null || current.isEmpty) {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text('下载核心'),
+                      content: const Text('当前未安装核心，是否立即下载并安装最新版本？'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('取消'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('立即下载'),
+                        ),
+                      ],
+                    ),
+                  );
+                  
+                  if (confirm == true) {
+                    try {
+                      await controller.coreRunner.ensureCorePresent();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('核心已下载并安装')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('下载失败：$e')),
+                        );
+                      }
+                    }
+                  }
+                  return;
+                }
+                
                 final msg = await controller.checkCoreVersionStatus();
                 if (!context.mounted) return;
                 showDialog<void>(

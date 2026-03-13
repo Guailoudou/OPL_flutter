@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
+import '../core/android_core_service.dart';
 import '../core/config_models.dart';
 import '../core/platform_paths.dart';
 import 'log_store.dart';
@@ -126,6 +127,10 @@ class CoreRunner {
   }
 
   Future<void> start(ConfigRoot config) async {
+    if (Platform.isAndroid) {
+      await _startAndroid(config);
+      return;
+    }
     if (!PlatformPaths.isDesktop) {
       logs.add('[core] mobile start reserved (not implemented)');
       return;
@@ -140,27 +145,87 @@ class CoreRunner {
     final workDir = (await PlatformPaths.configDir()).path;
     logs.add('[core] starting: ${core.path}');
 
-    // Assumption: core reads config.json from same directory.
-    _process = await Process.start(
-      core.path,
-      const [],
-      workingDirectory: workDir,
-      runInShell: true,
-    );
+    if (Platform.isWindows) {
+      await _runAsAdmin(core.path, workDir);
+    } else {
+      _process = await Process.start(
+        core.path,
+        const [],
+        workingDirectory: workDir,
+        runInShell: true,
+      );
 
-    _outSub = _process!.stdout
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) => logs.add(line));
-    _errSub = _process!.stderr
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) => logs.add('[stderr] $line'));
+      _outSub = _process!.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) => logs.add(line));
+      _errSub = _process!.stderr
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) => logs.add('[stderr] $line'));
 
-    unawaited(_process!.exitCode.then((code) {
-      logs.add('[core] exited with code: $code');
-      _cleanup();
-    }));
+      unawaited(_process!.exitCode.then((code) {
+        logs.add('[core] exited with code: $code');
+        _cleanup();
+      }));
+    }
+  }
+
+  Future<void> _runAsAdmin(String exePath, String workingDir) async {
+    if (!Platform.isWindows) return;
+    
+    logs.add('[core] starting core: ${exePath}');
+    
+    try {
+      // Start core directly without admin elevation popup
+      // The core should work without admin rights in most cases
+      _process = await Process.start(
+        exePath,
+        const [],
+        workingDirectory: workingDir,
+        runInShell: true,
+      );
+
+      _outSub = _process!.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) => logs.add(line));
+      _errSub = _process!.stderr
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) => logs.add('[stderr] $line'));
+
+      unawaited(_process!.exitCode.then((code) {
+        logs.add('[core] exited with code: $code');
+        _cleanup();
+      }));
+      
+      logs.add('[core] started successfully');
+    } catch (e) {
+      logs.add('[core] start failed: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _startAndroid(ConfigRoot config) async {
+    if (!Platform.isAndroid) return;
+    
+    final dir = await PlatformPaths.configDir();
+    final dirPath = dir.path;
+    
+    logs.add('[core] starting android core at: $dirPath');
+    
+    try {
+      final success = await AndroidCoreService.startCore(dirPath);
+      if (success) {
+        logs.add('[core] android core started via MethodChannel');
+      } else {
+        logs.add('[core] failed to start android core');
+      }
+    } catch (e) {
+      logs.add('[core] android start error: $e');
+      rethrow;
+    }
   }
 
   Future<void> stop() async {

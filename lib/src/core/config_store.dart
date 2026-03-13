@@ -29,11 +29,14 @@ class ConfigStore {
       }
       final cfg = ConfigRoot.fromJson(decoded);
       final fixed = _ensureUid(cfg);
+      // Only save if UID was actually changed
       if (fixed.network.node != cfg.network.node) {
         await save(fixed);
       }
       return fixed;
-    } catch (_) {
+    } catch (e) {
+      // Only reset on parse error, don't reset on other errors
+      print('Failed to load config: $e');
       final reset = _ensureUid(ConfigRoot.defaults());
       await save(reset);
       return reset;
@@ -43,7 +46,16 @@ class ConfigStore {
   Future<void> save(ConfigRoot root) async {
     final f = await file;
     final encoder = const JsonEncoder.withIndent('  ');
-    final json = encoder.convert(root.toJson());
+    var json = encoder.convert(root.toJson());
+    
+    // Fix token value: replace quoted string with raw number to preserve large values
+    // This is needed because BigInt.toString() produces a quoted string in JSON,
+    // but the core expects a numeric value
+    json = json.replaceAllMapped(
+      RegExp(r'"Token":\s*"(\d+)"'),
+      (match) => '"Token": ${match.group(1)}',
+    );
+    
     await f.writeAsString(json);
   }
 
@@ -52,9 +64,13 @@ class ConfigStore {
     // Treat 16-hex but all zeros as invalid so that a real random UID is generated.
     final isAllZero = raw.length == 16 && RegExp(r'^0+$').hasMatch(raw);
     if (Uid.isValid16Hex(raw) && !isAllZero) {
-      if (raw == root.network.node) return root;
-      return root.copyWith(network: root.network.copyWith(node: raw));
+      // UID is valid, keep it as is (preserve original case)
+      if (raw == root.network.node.toLowerCase()) {
+        return root;
+      }
+      return root.copyWith(network: root.network.copyWith(node: root.network.node));
     }
+    // UID is invalid, generate new one
     final uid = Uid.generate16();
     return root.copyWith(network: root.network.copyWith(node: uid));
   }

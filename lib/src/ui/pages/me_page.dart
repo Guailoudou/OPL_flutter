@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../state/app_controller.dart';
 
@@ -108,9 +109,39 @@ class MePage extends StatelessWidget {
                         Text('应用：${info.appName}'),
                         Text('版本：${info.version}+${info.buildNumber}'),
                         const SizedBox(height: 10),
-                        const Text('作者：Guail'),
+                        const Text('作者：Guailoudou'),
                         const SizedBox(height: 10),
-                        const Text('Bug 反馈：请在你的项目仓库/群内反馈路径处填写'),
+                        InkWell(
+                          onTap: () async {
+                            final url = Uri.parse('https://space.bilibili.com/496960407');
+                            if (await canLaunchUrl(url)) {
+                              await launchUrl(url, mode: LaunchMode.externalApplication);
+                            }
+                          },
+                          child: const Text(
+                            '作者 B 站：https://space.bilibili.com/496960407',
+                            style: TextStyle(
+                              color: Colors.blue,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        InkWell(
+                          onTap: () async {
+                            final url = Uri.parse('https://github.com/your-repo/issues');
+                            if (await canLaunchUrl(url)) {
+                              await launchUrl(url, mode: LaunchMode.externalApplication);
+                            }
+                          },
+                          child: const Text(
+                            'Bug 反馈：点击打开 Issue 页面',
+                            style: TextStyle(
+                              color: Colors.blue,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     actions: [
@@ -146,17 +177,24 @@ Future<int?> _editIntDialog(
         decoration: const InputDecoration(border: OutlineInputBorder()),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        TextButton(
+          onPressed: () {
+            c.dispose();
+            Navigator.pop(context, null);
+          },
+          child: const Text('取消'),
+        ),
         FilledButton(
           onPressed: () {
-            Navigator.pop(context, int.tryParse(c.text.trim()));
+            final value = int.tryParse(c.text.trim());
+            c.dispose();
+            Navigator.pop(context, value);
           },
           child: const Text('保存'),
         ),
       ],
     ),
   );
-  c.dispose();
   return v;
 }
 

@@ -34,6 +34,94 @@ class TunnelsPage extends StatelessWidget {
           ),
         ],
       ),
+      body: Column(
+        children: [
+          _UidBanner(uid: cfg.network.node),
+          Expanded(
+            child: ListView.separated(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+              itemCount: cfg.apps.length + 1,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, idx) {
+                if (idx == 0) {
+                  return _PathBanner();
+                }
+                final i = idx - 1;
+                final tunnel = cfg.apps[i];
+                final status = _resolveStatus(
+                  tunnel,
+                  logs.lines,
+                  controller.coreRunning,
+                );
+                return _TunnelTile(
+                  tunnel: tunnel,
+                  status: status,
+                  onToggle: (v) async {
+                    if (controller.coreRunning) {
+                      await _showConfigLockedDialog(context);
+                      return;
+                    }
+                    await controller.toggleTunnelEnabled(i, v);
+                  },
+                  onAction: (action, tapPosition) async {
+                    switch (action) {
+                      case _TunnelAction.edit:
+                        if (controller.coreRunning) {
+                          await _showConfigLockedDialog(context);
+                          return;
+                        }
+                        final updated = await showDialog<AppTunnel>(
+                          context: context,
+                          builder: (_) => TunnelEditorDialog(initial: tunnel),
+                        );
+                        if (updated != null) {
+                          await controller.upsertTunnel(updated, index: i);
+                        }
+                        return;
+                      case _TunnelAction.copyIp:
+                        await Clipboard.setData(
+                          ClipboardData(text: tunnel.localLoopback),
+                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('已复制：${tunnel.localLoopback}')),
+                          );
+                        }
+                        return;
+                      case _TunnelAction.delete:
+                        if (controller.coreRunning) {
+                          await _showConfigLockedDialog(context);
+                          return;
+                        }
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            title: const Text('删除隧道'),
+                            content: Text('确认删除「${tunnel.appName}」？'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('取消'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('删除'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (ok == true) {
+                          await controller.deleteTunnel(i);
+                        }
+                        return;
+                    }
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
       floatingActionButton: _FabRow(
         onAdd: () async {
           if (controller.coreRunning) {
@@ -50,101 +138,31 @@ class TunnelsPage extends StatelessWidget {
         },
         onStart: () async {
           try {
-            await controller.startCore();
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('已启动核心（桌面端）')),
-              );
+            final wasRunning = controller.coreRunning;
+            if (wasRunning) {
+              await controller.stopCore();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('已停止核心')),
+                );
+              }
+            } else {
+              await controller.startCore();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('已启动核心（桌面端）')),
+                );
+              }
             }
           } catch (e) {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('启动失败：$e')),
+                SnackBar(content: Text('操作失败：$e')),
               );
             }
           }
         },
-      ),
-      body: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-        itemCount: cfg.apps.length + 1,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (context, idx) {
-          if (idx == 0) {
-            return _PathBanner();
-          }
-          final i = idx - 1;
-          final tunnel = cfg.apps[i];
-          final status = _resolveStatus(
-            tunnel,
-            logs.lines,
-            controller.coreRunning,
-          );
-          return _TunnelTile(
-            tunnel: tunnel,
-            status: status,
-            onToggle: (v) async {
-              if (controller.coreRunning) {
-                await _showConfigLockedDialog(context);
-                return;
-              }
-              await controller.toggleTunnelEnabled(i, v);
-            },
-            onAction: (action, tapPosition) async {
-              switch (action) {
-                case _TunnelAction.edit:
-                  if (controller.coreRunning) {
-                    await _showConfigLockedDialog(context);
-                    return;
-                  }
-                  final updated = await showDialog<AppTunnel>(
-                    context: context,
-                    builder: (_) => TunnelEditorDialog(initial: tunnel),
-                  );
-                  if (updated != null) {
-                    await controller.upsertTunnel(updated, index: i);
-                  }
-                  return;
-                case _TunnelAction.copyIp:
-                  await Clipboard.setData(
-                    ClipboardData(text: tunnel.localLoopback),
-                  );
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('已复制：${tunnel.localLoopback}')),
-                    );
-                  }
-                  return;
-                case _TunnelAction.delete:
-                  if (controller.coreRunning) {
-                    await _showConfigLockedDialog(context);
-                    return;
-                  }
-                  final ok = await showDialog<bool>(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      title: const Text('删除隧道'),
-                      content: Text('确认删除「${tunnel.appName}」？'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('取消'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text('删除'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (ok == true) {
-                    await controller.deleteTunnel(i);
-                  }
-                  return;
-              }
-            },
-          );
-        },
+        isRunning: controller.coreRunning,
       ),
     );
   }
@@ -164,6 +182,56 @@ Future<void> _showConfigLockedDialog(BuildContext context) async {
       ],
     ),
   );
+}
+
+class _UidBanner extends StatelessWidget {
+  const _UidBanner({required this.uid});
+
+  final String uid;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            const Icon(Icons.person),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '我的 UID',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                  Text(
+                    uid.isEmpty ? '未获取到 UID' : uid,
+                    style: Theme.of(context).textTheme.titleMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.copy),
+              tooltip: '复制 UID',
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: uid));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('已复制 UID')),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PathBanner extends StatelessWidget {
@@ -333,10 +401,11 @@ class _TunnelTile extends StatelessWidget {
 }
 
 class _FabRow extends StatelessWidget {
-  const _FabRow({required this.onAdd, required this.onStart});
+  const _FabRow({required this.onAdd, required this.onStart, required this.isRunning});
 
   final VoidCallback onAdd;
   final VoidCallback onStart;
+  final bool isRunning;
 
   @override
   Widget build(BuildContext context) {
@@ -352,7 +421,7 @@ class _FabRow extends StatelessWidget {
         FloatingActionButton(
           heroTag: 'start',
           onPressed: onStart,
-          child: const Icon(Icons.play_arrow),
+          child: Icon(isRunning ? Icons.pause : Icons.play_arrow),
         ),
       ],
     );
@@ -370,32 +439,35 @@ class TunnelEditorDialog extends StatefulWidget {
 
 class _TunnelEditorDialogState extends State<TunnelEditorDialog> {
   late final TextEditingController name;
-  late final TextEditingController protocol;
+  late String protocol;
   late final TextEditingController srcPort;
   late final TextEditingController peerNode;
   late final TextEditingController dstPort;
   bool enabled = false;
+  final _formKey = GlobalKey<FormState>();
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     final t = widget.initial;
     name = TextEditingController(text: t?.appName ?? '');
-    protocol = TextEditingController(text: (t?.protocol ?? 'tcp'));
+    protocol = t?.protocol ?? 'tcp';
     srcPort = TextEditingController(text: (t?.srcPort ?? 0).toString());
     peerNode = TextEditingController(text: t?.peerNode ?? '');
     dstPort = TextEditingController(text: (t?.dstPort ?? 0).toString());
-    // 当填写远程端口时，自动复制到本地端口
-    dstPort.addListener(() {
-      srcPort.text = dstPort.text;
-    });
     enabled = (t?.enabled ?? 0) == 1;
+    
+    dstPort.addListener(() {
+      if (srcPort.text != dstPort.text) {
+        srcPort.text = dstPort.text;
+      }
+    });
   }
 
   @override
   void dispose() {
     name.dispose();
-    protocol.dispose();
     srcPort.dispose();
     peerNode.dispose();
     dstPort.dispose();
@@ -404,54 +476,102 @@ class _TunnelEditorDialogState extends State<TunnelEditorDialog> {
 
   int _toPort(String v) => int.tryParse(v.trim()) ?? 0;
 
+  bool _validateAndSave() {
+    final form = _formKey.currentState;
+    if (!form!.validate()) return false;
+    
+    form.save();
+    
+    if (peerNode.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('远程 UID 不能为空')),
+      );
+      return false;
+    }
+    
+    if (dstPort.text.trim().isEmpty || _toPort(dstPort.text) == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('远程端口不能为空且必须大于 0')),
+      );
+      return false;
+    }
+    
+    if (srcPort.text.trim().isEmpty || _toPort(srcPort.text) == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('本地端口不能为空且必须大于 0')),
+      );
+      return false;
+    }
+    
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.initial != null;
     return AlertDialog(
       title: Text(isEdit ? '编辑隧道' : '添加隧道'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _Field(
-                label: '隧道名称（AppName）',
-                controller: name,
-                hint: '例如：自定义隧道'
-              ),
-              const SizedBox(height: 10),
-              _Field(
-                label: '协议（Protocol）',
-                controller: protocol,
-                hint: 'tcp / udp',
-              ),
-              const SizedBox(height: 10),
-              _Field(
-                label: '远程 UID（PeerNode）',
-                controller: peerNode,
-                hint: '16 位 0-f',
-              ),
-              const SizedBox(height: 10),
-              _Field(
-                label: '远程端口（DstPort）',
-                controller: dstPort,
-                inputType: TextInputType.number,
-              ),
-              const SizedBox(height: 10),
-              _Field(
-                label: '本地端口（SrcPort）',
-                controller: srcPort,
-                inputType: TextInputType.number,
-              ),
-              const SizedBox(height: 10),
-              SwitchListTile(
-                value: enabled,
-                onChanged: (v) => setState(() => enabled = v),
-                title: const Text('启用（Enabled）'),
-                contentPadding: EdgeInsets.zero,
-              ),
-            ],
+      content: Form(
+        key: _formKey,
+        child: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _Field(
+                  label: '隧道名称（AppName）',
+                  controller: name,
+                  hint: '例如：自定义隧道'
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: protocol,
+                  decoration: const InputDecoration(
+                    labelText: '协议（Protocol）',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'tcp', child: Text('TCP')),
+                    DropdownMenuItem(value: 'udp', child: Text('UDP')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        protocol = value;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 10),
+                _Field(
+                  label: '远程 UID（PeerNode）*',
+                  controller: peerNode,
+                  hint: '16 位 0-f（必填）',
+                ),
+                const SizedBox(height: 10),
+                _Field(
+                  label: '远程端口（DstPort）*',
+                  controller: dstPort,
+                  inputType: TextInputType.number,
+                  hint: '必填，必须大于 0',
+                ),
+                const SizedBox(height: 10),
+                _Field(
+                  label: '本地端口（SrcPort）*',
+                  controller: srcPort,
+                  inputType: TextInputType.number,
+                  hint: '必填，必须大于 0',
+                ),
+                const SizedBox(height: 10),
+                SwitchListTile(
+                  value: enabled,
+                  onChanged: (v) => setState(() => enabled = v),
+                  title: const Text('启用（Enabled）'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -462,10 +582,12 @@ class _TunnelEditorDialogState extends State<TunnelEditorDialog> {
         ),
         FilledButton(
           onPressed: () {
+            if (!_validateAndSave()) return;
+            
             final base = widget.initial;
             final t = AppTunnel(
               appName: name.text.trim(),
-              protocol: protocol.text.trim().isEmpty ? 'tcp' : protocol.text.trim(),
+              protocol: protocol,
               underlayProtocol: base?.underlayProtocol ?? '',
               punchPriority: base?.punchPriority ?? 0,
               whitelist: base?.whitelist ?? '',

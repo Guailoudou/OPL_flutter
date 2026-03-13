@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'logs_page.dart';
 import 'me_page.dart';
+import 'notices_page.dart';
 import 'settings_page.dart';
 import 'tunnels_page.dart';
 
@@ -39,6 +40,7 @@ class _HomeShellState extends State<HomeShell> {
     final pages = const [
       TunnelsPage(),
       LogsPage(),
+      NoticesPage(),
       SettingsPage(),
       MePage(),
     ];
@@ -62,6 +64,10 @@ class _HomeShellState extends State<HomeShell> {
                 NavigationRailDestination(
                   icon: Icon(Icons.receipt_long),
                   label: Text('日志'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.notifications),
+                  label: Text('公告'),
                 ),
                 NavigationRailDestination(
                   icon: Icon(Icons.settings),
@@ -88,6 +94,7 @@ class _HomeShellState extends State<HomeShell> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.tune), label: '隧道'),
           NavigationDestination(icon: Icon(Icons.receipt_long), label: '日志'),
+          NavigationDestination(icon: Icon(Icons.notifications), label: '公告'),
           NavigationDestination(icon: Icon(Icons.settings), label: '设置'),
           NavigationDestination(icon: Icon(Icons.person), label: '我的'),
         ],

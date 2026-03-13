@@ -17,6 +17,8 @@ dependencies:
   package_info_plus: ^8.1.2
   archive: ^3.6.1
   crypto: ^3.0.3
+  url_launcher: ^6.3.0
+  ffi: ^2.1.0
 
 dev_dependencies:
   flutter_test:

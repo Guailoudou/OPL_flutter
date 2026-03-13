@@ -4,25 +4,30 @@ class AppSettings {
   const AppSettings({
     required this.themeMode,
     required this.coreVersion,
+    required this.lastNoticeTime,
   });
 
   final AppThemeMode themeMode;
   final String? coreVersion;
+  final String? lastNoticeTime;
 
   factory AppSettings.defaults() {
     return const AppSettings(
       themeMode: AppThemeMode.system,
       coreVersion: null,
+      lastNoticeTime: null,
     );
   }
 
   AppSettings copyWith({
     AppThemeMode? themeMode,
     String? coreVersion,
+    String? lastNoticeTime,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
       coreVersion: coreVersion ?? this.coreVersion,
+      lastNoticeTime: lastNoticeTime ?? this.lastNoticeTime,
     );
   }
 
@@ -53,12 +58,14 @@ class AppSettings {
     return AppSettings(
       themeMode: _themeFromString(json['themeMode'] as String?),
       coreVersion: json['coreVersion'] as String?,
+      lastNoticeTime: json['lastNoticeTime'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'themeMode': _themeToString(themeMode),
         'coreVersion': coreVersion,
+        'lastNoticeTime': lastNoticeTime,
       };
 }
 

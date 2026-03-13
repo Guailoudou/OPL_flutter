@@ -1,12 +1,36 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_controller.dart';
 import 'navigation.dart';
 import '../ui/pages/home_shell.dart';
 
-class AppRoot extends StatelessWidget {
+class AppRoot extends StatefulWidget {
   const AppRoot({super.key});
+
+  @override
+  State<AppRoot> createState() => _AppRootState();
+}
+
+class _AppRootState extends State<AppRoot> {
+  @override
+  void initState() {
+    super.initState();
+    // Handle app close event
+    SystemChannels.lifecycle.setMessageHandler((msg) async {
+      if (msg == 'AppExitEvent') {
+        final controller = context.read<AppController>();
+        if (controller.coreRunning) {
+          await controller.stopCore();
+        }
+        exit(0);
+      }
+      return msg;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

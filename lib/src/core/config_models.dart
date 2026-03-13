@@ -62,7 +62,7 @@ class NetworkConfig {
     required this.publicIPPort,
   });
 
-  final int token;
+  final BigInt token;
   final String node;
   final String user;
   final int shareBandwidth;
@@ -72,11 +72,11 @@ class NetworkConfig {
 
   static NetworkConfig defaults() {
     return NetworkConfig(
-      token: 7646326351251388417,
+      token: BigInt.parse('11602319472897248650'),
       node: '',
       user: 'gldoffice',
       shareBandwidth: 9999,
-      serverHost: '118.193.34.69',
+      serverHost: 'api.openp2p.cn',
       serverPort: 27183,
       publicIPPort: 0,
     );
@@ -84,8 +84,24 @@ class NetworkConfig {
 
   factory NetworkConfig.fromJson(Map<String, dynamic> json) {
     final d = NetworkConfig.defaults();
+    final tokenValue = json['Token'];
+    BigInt tokenBigInt;
+    if (tokenValue is int) {
+      tokenBigInt = BigInt.from(tokenValue);
+    } else if (tokenValue is num) {
+      tokenBigInt = BigInt.from(tokenValue.toInt());
+    } else if (tokenValue is String) {
+      try {
+        tokenBigInt = BigInt.parse(tokenValue);
+      } catch (_) {
+        tokenBigInt = d.token;
+      }
+    } else {
+      tokenBigInt = d.token;
+    }
+    
     return NetworkConfig(
-      token: (json['Token'] as num?)?.toInt() ?? d.token,
+      token: tokenBigInt,
       node: (json['Node'] as String?) ?? d.node,
       user: (json['User'] as String?) ?? d.user,
       shareBandwidth: (json['ShareBandwidth'] as num?)?.toInt() ?? d.shareBandwidth,
@@ -95,18 +111,22 @@ class NetworkConfig {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'Token': token,
-        'Node': node,
-        'User': user,
-        'ShareBandwidth': shareBandwidth,
-        'ServerHost': serverHost,
-        'ServerPort': serverPort,
-        'PublicIPPort': publicIPPort,
-      };
+  Map<String, dynamic> toJson() {
+    // Use custom JSON encoding to preserve large token value
+    // Write token as raw number string that JSON encoder will handle
+    return {
+      'Token': token.toString(),
+      'Node': node,
+      'User': user,
+      'ShareBandwidth': shareBandwidth,
+      'ServerHost': serverHost,
+      'ServerPort': serverPort,
+      'PublicIPPort': publicIPPort,
+    };
+  }
 
   NetworkConfig copyWith({
-    int? token,
+    BigInt? token,
     String? node,
     String? user,
     int? shareBandwidth,

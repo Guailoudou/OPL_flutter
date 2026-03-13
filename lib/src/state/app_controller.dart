@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../core/config_models.dart';
 import '../core/config_store.dart';
+import '../core/notice_service.dart';
 import '../core/settings_models.dart';
 import '../core/settings_store.dart';
 import '../app/navigation.dart';
@@ -23,6 +25,11 @@ class AppController extends ChangeNotifier {
 
   Future<void> init() async {
     try {
+      // Check and request admin privileges on Windows
+      if (Platform.isWindows) {
+        await _checkAndRequestAdmin();
+      }
+      
       config = await _store.loadOrCreate();
       settings = await _settingsStore.loadOrCreate();
       logs.onNewLine = _handleLogLine;
@@ -30,12 +37,116 @@ class AppController extends ChangeNotifier {
         logs: logs,
         onCoreVersionChanged: _updateCoreVersion,
       );
+      _checkNotices();
     } catch (e) {
       bootError = e.toString();
     } finally {
       booting = false;
       notifyListeners();
     }
+  }
+
+  Future<void> _checkAndRequestAdmin() async {
+    // Check if running as admin
+    if (await _isRunningAsAdmin()) {
+      logs.add('[app] running with admin privileges');
+      return;
+    }
+    
+    logs.add('[app] requesting admin privileges...');
+    
+    try {
+      // Restart with admin privileges
+      final exePath = Platform.resolvedExecutable;
+      final result = await Process.start(
+        'powershell',
+        [
+          '-WindowStyle',
+          'Hidden',
+          '-Command',
+          'Start-Process -FilePath "$exePath" -Verb RunAs',
+        ],
+        runInShell: true,
+      );
+      
+      // Exit current non-admin instance
+      logs.add('[app] restarting with admin privileges...');
+      exit(0);
+    } catch (e) {
+      logs.add('[app] failed to request admin: $e');
+      // Continue without admin if request fails
+    }
+  }
+
+  Future<bool> _isRunningAsAdmin() async {
+    try {
+      final result = await Process.run(
+        'powershell',
+        ['-Command', '([Security.Principal.WindowsIdentity]::GetCurrent().Owner).IsWellKnown([Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid)'],
+        runInShell: true,
+      );
+      return result.stdout.toString().trim().toLowerCase() == 'true';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> _checkNotices() async {
+    final service = NoticeService();
+    final response = await service.fetchNotices();
+    if (response == null || response.notices.isEmpty) return;
+
+    final lastTime = settings.lastNoticeTime;
+    if (service.hasNewNotice(lastTime, response.notices)) {
+      // Sort notices by time to get the latest one
+      final sortedNotices = List<Notice>.from(response.notices)..sort((a, b) {
+        try {
+          final timeA = DateTime.parse(a.time.replaceAll(' ', 'T'));
+          final timeB = DateTime.parse(b.time.replaceAll(' ', 'T'));
+          return timeB.compareTo(timeA); // Descending order
+        } catch (_) {
+          return b.time.compareTo(a.time);
+        }
+      });
+      
+      final latestNotice = sortedNotices.first;
+      _showNoticeDialog(latestNotice);
+      
+      settings = settings.copyWith(lastNoticeTime: latestNotice.time);
+      await _settingsStore.save(settings);
+    }
+  }
+
+  void _showNoticeDialog(Notice notice) {
+    final ctx = rootNavigatorKey.currentContext;
+    if (ctx == null) return;
+    
+    showDialog<void>(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        title: Text(notice.title),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(notice.content),
+              const SizedBox(height: 16),
+              Text(
+                notice.time,
+                style: Theme.of(ctx).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> reloadConfig() async {
