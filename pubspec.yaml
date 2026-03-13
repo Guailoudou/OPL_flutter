@@ -1,0 +1,28 @@
+name: opl_config_manager
+description: Cross-platform P2P core config manager (desktop/mobile).
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  provider: ^6.1.2
+  path: ^1.9.0
+  path_provider: ^2.1.5
+  http: ^1.2.2
+  package_info_plus: ^8.1.2
+  archive: ^3.6.1
+  crypto: ^3.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
