@@ -112,7 +112,7 @@ Future<void> _restoreExistingWindow() async {
     >('SetForegroundWindow');
     
     // 查找窗口标题
-    final windowPtr = findWindow(0, 'OPL Config Manager'.toUtf16());
+    final windowPtr = findWindow(0, 'OPL联机工具'.toUtf16());
     
     if (windowPtr != 0) {
       // 恢复窗口

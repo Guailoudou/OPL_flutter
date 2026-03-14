@@ -111,7 +111,7 @@ class _AppRootState extends State<AppRoot> with WindowListener {
     try {
       // Initialize system tray
       await _systemTray.initSystemTray(
-        title: 'OPL Config Manager',
+        title: 'OPL联机工具',
         iconPath: 'assets/icons/icon.ico',
       );
       
@@ -224,7 +224,7 @@ class _AppRootState extends State<AppRoot> with WindowListener {
     final controller = Provider.of<AppController>(context);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'OPL Config Manager',
+      title: 'OPL联机工具',
       navigatorKey: rootNavigatorKey,
       themeMode: controller.themeMode,
       theme: ThemeData(
