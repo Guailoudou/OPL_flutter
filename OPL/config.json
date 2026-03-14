@@ -1,33 +1,13 @@
 {
-  "network": {
-    "Token": 9223372036854775807,
-    "Node": "be3ba83b62182125",
+  "Network": {
+    "Token": 11602319472897248650,
+    "Node": "338822cb015f07e1",
     "User": "gldoffice",
     "ShareBandwidth": 9999,
     "ServerHost": "api.openp2p.cn",
-    "ServerIP": "",
     "ServerPort": 27183,
-    "PublicIPPort": 1918
+    "PublicIPPort": 0
   },
-  "apps": [
-    {
-      "AppName": "",
-      "Protocol": "tcp",
-      "UnderlayProtocol": "",
-      "PunchPriority": 0,
-      "Whitelist": "",
-      "SrcPort": 7657,
-      "PeerNode": "tyrytffhfgh",
-      "DstPort": 7657,
-      "DstHost": "localhost",
-      "PeerUser": "",
-      "RelayNode": "",
-      "ForceRelay": 0,
-      "Enabled": 0
-    }
-  ],
-  "LogLevel": 1,
-  "MaxLogSize": 1048576,
-  "TLSInsecureSkipVerify": false,
-  "Forcev6": false
+  "Apps": [],
+  "LogLevel": 1
 }
