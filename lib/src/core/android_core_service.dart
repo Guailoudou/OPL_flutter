@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
 
+import '../utils/logger.dart';
+
 class AndroidCoreService {
   static const MethodChannel _channel = MethodChannel('com.example.opl_config_manager/core');
 
@@ -15,7 +17,7 @@ class AndroidCoreService {
       });
       return result ?? false;
     } catch (e) {
-      print('Failed to start core on Android: $e');
+      L.e('Failed to start core on Android', tag: 'android', error: e);
       return false;
     }
   }

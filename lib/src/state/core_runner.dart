@@ -231,13 +231,73 @@ class CoreRunner {
   Future<void> stop() async {
     final p = _process;
     if (p == null) return;
-    logs.add('[core] stopping...');
-    p.kill(ProcessSignal.sigterm);
-    await Future.delayed(const Duration(milliseconds: 300));
-    if (_process != null) {
-      p.kill(ProcessSignal.sigkill);
+    
+    final pid = p.pid;
+    logs.add('[core] stopping... (PID: $pid)');
+    
+    try {
+      if (Platform.isWindows) {
+        // Kill process tree on Windows using taskkill with /T flag
+        // /T - Terminate the specified process and any child processes
+        // /F - Forcefully terminate
+        final result = await Process.run(
+          'taskkill', 
+          ['/F', '/T', '/PID', pid.toString()],
+          runInShell: true,
+        );
+        logs.add('[core] taskkill output: ${result.stdout}');
+        if (result.stderr.toString().isNotEmpty) {
+          logs.add('[core] taskkill error: ${result.stderr}');
+        }
+        
+        // Wait and verify process is killed
+        await Future.delayed(const Duration(milliseconds: 1000));
+        
+        // Check if process still exists
+        final checkResult = await Process.run(
+          'tasklist',
+          ['/FI', 'PID eq $pid'],
+          runInShell: true,
+        );
+        final stillRunning = checkResult.stdout.toString().contains(pid.toString());
+        if (stillRunning) {
+          logs.add('[core] WARNING: Process $pid still running, trying fallback...');
+          // Fallback: kill by process name
+          await Process.run(
+            'taskkill', 
+            ['/F', '/IM', 'openp2p-opl.exe'],
+            runInShell: true,
+          );
+          logs.add('[core] killed by process name');
+        } else {
+          logs.add('[core] process $pid successfully killed');
+        }
+      } else {
+        // Use signals on Unix-like systems
+        p.kill(ProcessSignal.sigterm);
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (_process != null) {
+          p.kill(ProcessSignal.sigkill);
+        }
+      }
+    } catch (e) {
+      logs.add('[core] failed to stop core: $e');
+      // Fallback: try to kill by process name
+      if (Platform.isWindows) {
+        try {
+          await Process.run(
+            'taskkill', 
+            ['/F', '/IM', 'openp2p-opl.exe'],
+            runInShell: true,
+          );
+          logs.add('[core] killed by process name (fallback)');
+        } catch (_) {
+          // Ignore
+        }
+      }
+    } finally {
+      _cleanup();
     }
-    _cleanup();
   }
 
   void _cleanup() {

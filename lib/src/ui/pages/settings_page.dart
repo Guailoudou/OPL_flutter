@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/settings_models.dart';
 import '../../state/app_controller.dart';
+import '../../utils/logger.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -12,11 +15,60 @@ class SettingsPage extends StatelessWidget {
     final controller = context.watch<AppController>();
     final themeMode = controller.settings.themeMode;
     final coreVersion = controller.coreVersion ?? '未安装';
+    final runInBackground = controller.settings.runInBackground;
+    final askBeforeMinimize = controller.settings.askBeforeMinimize;
 
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: ListView(
         children: [
+          // Background run setting (Windows only)
+          if (Platform.isWindows) ...[
+            ListTile(
+              leading: const Icon(Icons.minimize),
+              title: const Text('关闭时最小化到托盘'),
+              subtitle: const Text('点击关闭按钮时最小化到系统托盘而非完全退出'),
+              trailing: Switch(
+                value: runInBackground,
+                onChanged: (value) async {
+                  L.d('runInBackground: $runInBackground -> $value', tag: 'settings');
+                  
+                  await controller.settingsStore.save(
+                    controller.settings.copyWith(runInBackground: value),
+                  );
+                  
+                  // Update controller settings
+                  controller.settings = controller.settings.copyWith(runInBackground: value);
+                  controller.notifyListeners();
+                  
+                  L.d('Updated to $value', tag: 'settings');
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.help_outline),
+              title: const Text('询问是否最小化'),
+              subtitle: const Text('关闭时弹窗询问，之后按选择执行'),
+              trailing: Switch(
+                value: askBeforeMinimize,
+                onChanged: (value) async {
+                  L.d('askBeforeMinimize: $askBeforeMinimize -> $value', tag: 'settings');
+                  
+                  await controller.settingsStore.save(
+                    controller.settings.copyWith(askBeforeMinimize: value),
+                  );
+                  
+                  // Update controller settings
+                  controller.settings = controller.settings.copyWith(askBeforeMinimize: value);
+                  controller.notifyListeners();
+                  
+                  L.d('Updated to $value', tag: 'settings');
+                },
+              ),
+            ),
+            const Divider(height: 1),
+          ],
           ListTile(
             leading: const Icon(Icons.brightness_6),
             title: const Text('主题'),

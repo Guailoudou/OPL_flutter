@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../state/app_controller.dart';
 import 'logs_page.dart';
 import 'me_page.dart';
 import 'notices_page.dart';
@@ -18,6 +20,24 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int index = 0;
+  bool _hasCheckedNotices = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 页面加载完成后检查公告
+    if (!_hasCheckedNotices && !widget.booting && widget.bootError == null) {
+      _hasCheckedNotices = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkNotices();
+      });
+    }
+  }
+
+  Future<void> _checkNotices() async {
+    final controller = Provider.of<AppController>(context, listen: false);
+    await controller.checkNotices();
+  }
 
   @override
   Widget build(BuildContext context) {

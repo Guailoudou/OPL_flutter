@@ -141,6 +141,8 @@ class TunnelsPage extends StatelessWidget {
             final wasRunning = controller.coreRunning;
             if (wasRunning) {
               await controller.stopCore();
+              // Wait a bit to ensure process is killed
+              await Future.delayed(const Duration(milliseconds: 500));
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('已停止核心')),

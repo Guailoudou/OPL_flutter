@@ -19,6 +19,8 @@ dependencies:
   crypto: ^3.0.3
   url_launcher: ^6.3.0
   ffi: ^2.1.0
+  window_manager: ^0.3.8
+  system_tray: ^2.0.2
 
 dev_dependencies:
   flutter_test:
@@ -27,4 +29,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/icons/
 

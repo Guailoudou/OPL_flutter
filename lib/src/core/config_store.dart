@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'config_models.dart';
+import '../utils/logger.dart';
 import 'platform_paths.dart';
 import 'uid.dart';
 
@@ -36,7 +37,7 @@ class ConfigStore {
       return fixed;
     } catch (e) {
       // Only reset on parse error, don't reset on other errors
-      print('Failed to load config: $e');
+      L.e('Failed to load config', tag: 'config', error: e);
       final reset = _ensureUid(ConfigRoot.defaults());
       await save(reset);
       return reset;
@@ -60,17 +61,21 @@ class ConfigStore {
   }
 
   ConfigRoot _ensureUid(ConfigRoot root) {
-    final raw = root.network.node.trim().toLowerCase();
-    // Treat 16-hex but all zeros as invalid so that a real random UID is generated.
-    final isAllZero = raw.length == 16 && RegExp(r'^0+$').hasMatch(raw);
-    if (Uid.isValid16Hex(raw) && !isAllZero) {
-      // UID is valid, keep it as is (preserve original case)
-      if (raw == root.network.node.toLowerCase()) {
-        return root;
-      }
-      return root.copyWith(network: root.network.copyWith(node: root.network.node));
+    final raw = root.network.node.trim();
+    // Treat empty or all zeros as invalid
+    if (raw.isEmpty || raw == '0000000000000000') {
+      final uid = Uid.generate16();
+      return root.copyWith(network: root.network.copyWith(node: uid));
     }
-    // UID is invalid, generate new one
+    
+    // Check if it's valid 16-hex (case insensitive)
+    final isValid = RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(raw);
+    if (isValid) {
+      // UID is valid, return as-is without modification
+      return root;
+    }
+    
+    // Invalid format, generate new UID
     final uid = Uid.generate16();
     return root.copyWith(network: root.network.copyWith(node: uid));
   }
