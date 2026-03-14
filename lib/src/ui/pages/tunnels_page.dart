@@ -193,10 +193,24 @@ class _UidBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final controller = context.watch<AppController>();
+    final isRunning = controller.coreRunning;
+    final isLoggedIn = controller.coreLoggedIn;
+    
+    Color statusColor;
+    if (!isRunning) {
+      statusColor = Colors.grey;
+    } else if (!isLoggedIn) {
+      statusColor = Colors.orange;
+    } else {
+      statusColor = Colors.green;
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const Icon(Icons.person),
             const SizedBox(width: 10),
@@ -208,11 +222,20 @@ class _UidBanner extends StatelessWidget {
                     '我的 UID',
                     style: Theme.of(context).textTheme.labelSmall,
                   ),
-                  Text(
-                    uid.isEmpty ? '未获取到 UID' : uid,
-                    style: Theme.of(context).textTheme.titleMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          uid.isEmpty ? '未获取到 UID' : uid,
+                          style: Theme.of(context).textTheme.titleMedium,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      StatusDot(color: statusColor),
+                      const SizedBox(width: 6)
+                    ],
                   ),
                 ],
               ),

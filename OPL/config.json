@@ -1,13 +1,29 @@
 {
   "Network": {
-    "Token": 11602319472897248650,
-    "Node": "338822cb015f07e1",
+    "Token": 9223372036854775807,
+    "Node": "bdde3e45584f724d",
     "User": "gldoffice",
     "ShareBandwidth": 9999,
     "ServerHost": "api.openp2p.cn",
     "ServerPort": 27183,
     "PublicIPPort": 0
   },
-  "Apps": [],
+  "Apps": [
+    {
+      "AppName": "",
+      "Protocol": "tcp",
+      "UnderlayProtocol": "",
+      "PunchPriority": 0,
+      "Whitelist": "",
+      "SrcPort": 213123,
+      "PeerNode": "werewdf",
+      "DstPort": 213123,
+      "DstHost": "localhost",
+      "PeerUser": "",
+      "RelayNode": "",
+      "ForceRelay": 0,
+      "Enabled": 0
+    }
+  ],
   "LogLevel": 1
 }

@@ -56,34 +56,72 @@ class MePage extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  FilledButton(
-                    onPressed: () async {
-                      if (controller.coreRunning) {
-                        await _showConfigLockedDialog(context);
-                        return;
-                      }
-                      final ok = await showDialog<bool>(
-                        context: context,
-                        builder: (_) => AlertDialog(
-                          title: const Text('重置 UID'),
-                          content: const Text('此操作会生成新的 UID，可能导致现有连接失效。确认继续？'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text('取消'),
-                            ),
-                            FilledButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              child: const Text('确认重置'),
-                            ),
-                          ],
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () async {
+                            if (controller.coreRunning) {
+                              await _showConfigLockedDialog(context);
+                              return;
+                            }
+                            final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: const Text('重置 UID'),
+                                content: const Text('此操作会生成新的 UID，可能导致现有连接失效。确认继续？'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, false),
+                                    child: const Text('取消'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () => Navigator.pop(context, true),
+                                    child: const Text('确认重置'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (ok == true) {
+                              await controller.resetUid();
+                            }
+                          },
+                          child: const Text('重置 UID'),
                         ),
-                      );
-                      if (ok == true) {
-                        await controller.resetUid();
-                      }
-                    },
-                    child: const Text('重置 UID'),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () async {
+                            if (controller.coreRunning) {
+                              await _showConfigLockedDialog(context);
+                              return;
+                            }
+                            final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: const Text('重置程序'),
+                                content: const Text('此操作会删除 OPL 目录中的核心文件和配置文件，并重启应用。确认继续？'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, false),
+                                    child: const Text('取消'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () => Navigator.pop(context, true),
+                                    child: const Text('确认重置'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (ok == true) {
+                              await controller.resetApp(context);
+                            }
+                          },
+                          child: const Text('重置程序'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

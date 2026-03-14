@@ -69,15 +69,15 @@ class ConfigStore {
     }
     
     // Check if it's valid 16-hex (case insensitive)
-    final isValid = RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(raw);
-    if (isValid) {
+    // final isValid = RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(raw);
+    // if (isValid) {
       // UID is valid, return as-is without modification
       return root;
-    }
+    // }
     
     // Invalid format, generate new UID
-    final uid = Uid.generate16();
-    return root.copyWith(network: root.network.copyWith(node: uid));
+    // final uid = Uid.generate16();
+    // return root.copyWith(network: root.network.copyWith(node: uid));
   }
 }
 

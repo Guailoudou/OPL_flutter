@@ -3,11 +3,13 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import '../core/config_models.dart';
 import '../core/config_store.dart';
 import '../core/notice_service.dart';
 import '../core/settings_models.dart';
 import '../core/settings_store.dart';
+import '../core/platform_paths.dart';
 import '../app/navigation.dart';
 import '../utils/logger.dart';
 import 'core_runner.dart';
@@ -265,6 +267,86 @@ class AppController extends ChangeNotifier {
     await reloadConfig();
   }
 
+  Future<void> resetApp(BuildContext context) async {
+    try {
+      L.i('Starting app reset process', tag: 'app');
+      
+      // 获取 OPL 目录
+      final oplDir = await PlatformPaths.configDir();
+      L.d('OPL directory: ${oplDir.path}', tag: 'app');
+      
+      // 要删除的文件列表（不删除日志文件）
+      final filesToDelete = [
+        'openp2p-opl.exe',  // Windows 核心文件
+        'openp2p-opl',      // Linux/Mac 核心文件
+        'config.json',      // 配置文件
+        'set.json',         // 设置文件
+      ];
+      
+      // 删除文件
+      for (final fileName in filesToDelete) {
+        final filePath = p.join(oplDir.path, fileName);
+        final file = File(filePath);
+        if (await file.exists()) {
+          await file.delete();
+          L.d('Deleted file: $filePath', tag: 'app');
+        } else {
+          L.d('File not found, skipping: $filePath', tag: 'app');
+        }
+      }
+      
+      L.i('App reset completed, restarting...', tag: 'app');
+      
+      // 显示重启提示
+      if (context.mounted) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => AlertDialog(
+            title: const Text('重置完成'),
+            content: const Text('程序即将重启，请等待...'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('确定'),
+              ),
+            ],
+          ),
+        );
+      }
+      
+      // 重启应用
+      if (Platform.isWindows) {
+        final exePath = Platform.resolvedExecutable;
+        await Process.start(exePath, [], runInShell: true);
+        L.i('Restarting application', tag: 'app');
+        exit(0);
+      } else if (Platform.isLinux || Platform.isMacOS) {
+        final exePath = Platform.resolvedExecutable;
+        await Process.start(exePath, [], runInShell: true);
+        L.i('Restarting application', tag: 'app');
+        exit(0);
+      }
+    } catch (e) {
+      L.e('Failed to reset app', tag: 'app', error: e);
+      if (context.mounted) {
+        showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('重置失败'),
+            content: Text('重置过程中发生错误：$e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('确定'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> updateShareBandwidth(int value) async {
     final current = config;
     if (current == null) return;
@@ -307,16 +389,28 @@ class AppController extends ChangeNotifier {
     final current = config;
     if (current == null) return;
     await coreRunner.ensureCorePresent();
+    // Reset login status before starting
+    if (_coreLoggedIn) {
+      _coreLoggedIn = false;
+    }
     await coreRunner.start(current);
     notifyListeners();
   }
 
   Future<void> stopCore() async {
     await coreRunner.stop();
+    // Reset login status
+    if (_coreLoggedIn) {
+      _coreLoggedIn = false;
+    }
     notifyListeners();
   }
 
   bool get coreRunning => coreRunner.isRunning;
+  
+  // Core login status
+  bool _coreLoggedIn = false;
+  bool get coreLoggedIn => _coreLoggedIn;
 
   // === Settings (theme & core version) ===
 
@@ -365,7 +459,7 @@ class AppController extends ChangeNotifier {
 
     // login ok. ... node=xxxx
     if (lower.contains('login ok')) {
-      final match = RegExp(r'node=([0-9a-fA-F]{16})').firstMatch(line);
+      final match = RegExp(r'node=([^\s]+)').firstMatch(line);
       final node = match?.group(1);
       final current = config;
       if (node != null && current != null && current.network.node != node) {
@@ -374,6 +468,11 @@ class AppController extends ChangeNotifier {
             network: current.network.copyWith(node: node),
           ),
         );
+      }
+      // Set login status to true
+      if (!_coreLoggedIn) {
+        _coreLoggedIn = true;
+        notifyListeners();
       }
     }
 
@@ -388,7 +487,7 @@ class AppController extends ChangeNotifier {
 
     // peer offline ... <uid> offline
     if (lower.contains('offline')) {
-      final match = RegExp(r'([0-9a-fA-F]{16}) offline').firstMatch(lower);
+      final match = RegExp(r'([^\s]+) offline').firstMatch(lower);
       final peer = match?.group(1);
       if (peer != null) {
         _showDialogSafely(
