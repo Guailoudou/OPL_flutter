@@ -17,7 +17,7 @@
         <el-table-column label="隧道配置" width="200">
           <template #default="{ row }">
             <el-tag v-for="(tunnel, idx) in row.tunnel" :key="idx" style="margin-right: 4px">
-              {{ tunnel.type.toUpperCase() }}: {{ tunnel.sport }} → {{ tunnel.cport }}
+              {{ tunnel.type.toUpperCase() }}: {{ tunnel.Sport }} → {{ tunnel.Cport }}
             </el-tag>
           </template>
         </el-table-column>
@@ -48,10 +48,10 @@
                 </el-select>
               </el-col>
               <el-col :span="8">
-                <el-input-number v-model="tunnel.sport" placeholder="源端口" :min="1" :max="65535" />
+                <el-input-number v-model="tunnel.Sport" placeholder="源端口" :min="1" :max="65535" />
               </el-col>
               <el-col :span="8">
-                <el-input-number v-model="tunnel.cport" placeholder="目标端口" :min="1" :max="65535" />
+                <el-input-number v-model="tunnel.Cport" placeholder="目标端口" :min="1" :max="65535" />
               </el-col>
               <el-col :span="2">
                 <el-button type="danger" size="small" @click="removeTunnel(index)">
@@ -81,8 +81,8 @@ import { presetApi } from '@/api'
 
 interface Tunnel {
   type: string
-  sport: number
-  cport: number
+  Sport: number
+  Cport: number
 }
 
 interface Preset {
@@ -138,7 +138,7 @@ const handleDelete = async (index: number) => {
 }
 
 const addTunnel = () => {
-  form.value.tunnel.push({ type: 'tcp', sport: 0, cport: 0 })
+  form.value.tunnel.push({ type: 'tcp', Sport: 0, Cport: 0 })
 }
 
 const removeTunnel = (index: number) => {

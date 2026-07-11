@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/app/app.dart';
+import 'src/services/update_service.dart';
 import 'src/state/app_controller.dart';
 import 'src/state/log_store.dart';
 import 'src/utils/logger.dart';
@@ -54,6 +55,10 @@ void main() async {
         ChangeNotifierProxyProvider<AppController, LogStore>(
           create: (_) => logStore,
           update: (_, controller, __) => controller.logs,
+        ),
+        ChangeNotifierProxyProvider<AppController, UpdateService>(
+          create: (_) => throw Exception('UpdateService not initialized'),
+          update: (_, controller, __) => controller.updateService,
         ),
       ],
       child: const AppRoot(),

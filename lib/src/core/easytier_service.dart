@@ -2,12 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:archive/archive.dart';
-import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
 import 'platform_paths.dart';
-import 'url_config.dart';
 import '../utils/logger.dart';
 
 enum NetworkRole {
@@ -84,8 +81,7 @@ class EasyTierService {
     try {
       final exePath = await _getExecutablePath();
       if (!await File(exePath).exists()) {
-        L.i('EasyTier not installed, downloading...', tag: 'easytier');
-        await downloadEasyTier();
+        throw StateError('EasyTier 未安装，请先设置页下载安装');
       }
 
       final args = [
@@ -121,8 +117,7 @@ class EasyTierService {
     try {
       final exePath = await _getExecutablePath();
       if (!await File(exePath).exists()) {
-        L.i('EasyTier not installed, downloading...', tag: 'easytier');
-        await downloadEasyTier();
+        throw StateError('EasyTier 未安装，请先设置页下载安装');
       }
 
       final args = [
@@ -375,108 +370,6 @@ class EasyTierService {
       L.e('Failed to get EasyTier version', tag: 'easytier', error: e);
     }
     return null;
-  }
-
-  Future<void> downloadEasyTier({
-    void Function(double progress)? onProgress,
-  }) async {
-    L.i('Starting EasyTier download', tag: 'easytier');
-
-    try {
-      // 从后端 API 获取 EasyTier 下载信息
-      final response = await http.get(
-        Uri.parse(UrlConfig.releasesApiUrl),
-      ).timeout(const Duration(seconds: 10));
-
-      if (response.statusCode != 200) {
-        throw Exception('Failed to fetch release info: HTTP ${response.statusCode}');
-      }
-
-      final data = jsonDecode(response.body);
-      final easytierData = data['easytier'];
-      if (easytierData == null) {
-        throw Exception('No EasyTier release info found');
-      }
-
-      // 根据平台获取下载 URL
-      final platform = Platform.isWindows ? 'windows' :
-                       Platform.isLinux ? 'linux' :
-                       Platform.isMacOS ? 'macos' : null;
-
-      if (platform == null) {
-        throw Exception('Unsupported platform');
-      }
-
-      final platformData = easytierData[platform];
-      if (platformData == null || platformData['url'] == null) {
-        throw Exception('No download URL for platform: $platform');
-      }
-
-      final downloadUrl = platformData['url'];
-      final version = platformData['version'] as String?;
-
-      final configDir = await PlatformPaths.configDir();
-      final zipPath = p.join(configDir.path, 'easytier.zip');
-
-      // 下载 ZIP 文件
-      final downloadResponse = await http.get(
-        Uri.parse(downloadUrl),
-      ).timeout(const Duration(minutes: 5));
-
-      if (downloadResponse.statusCode != 200) {
-        throw Exception('Download failed: HTTP ${downloadResponse.statusCode}');
-      }
-
-      // 保存 ZIP 文件
-      final zipFile = File(zipPath);
-      await zipFile.writeAsBytes(downloadResponse.bodyBytes);
-      L.i('EasyTier downloaded to: $zipPath', tag: 'easytier');
-
-      // 解压 ZIP 文件
-      final bytes = await zipFile.readAsBytes();
-      final archive = ZipDecoder().decodeBytes(bytes);
-
-      for (final file in archive) {
-        final filename = p.join(configDir.path, file.name);
-        if (file.isFile) {
-          final outFile = File(filename);
-          await outFile.create(recursive: true);
-          await outFile.writeAsBytes(file.content as List<int>);
-        } else {
-          await Directory(filename).create(recursive: true);
-        }
-      }
-
-      // 删除 ZIP 文件
-      await zipFile.delete();
-
-      L.i('EasyTier extracted successfully', tag: 'easytier');
-
-      // 在非 Windows 平台上设置可执行权限
-      if (!Platform.isWindows) {
-        final exePath = await _getExecutablePath();
-        if (await File(exePath).exists()) {
-          await Process.run('chmod', ['+x', exePath]);
-          L.i('EasyTier executable ready: $exePath', tag: 'easytier');
-        }
-      } else {
-        final exePath = await _getExecutablePath();
-        if (await File(exePath).exists()) {
-          L.i('EasyTier executable ready: $exePath', tag: 'easytier');
-        }
-      }
-
-      // 获取并保存版本号
-      if (version != null) {
-        final actualVersion = await getEasyTierVersion() ?? version;
-        L.i('EasyTier version: $actualVersion', tag: 'easytier');
-        onVersionChanged?.call(actualVersion);
-      }
-
-    } catch (e) {
-      L.e('Failed to download EasyTier', tag: 'easytier', error: e);
-      rethrow;
-    }
   }
 
   void dispose() {

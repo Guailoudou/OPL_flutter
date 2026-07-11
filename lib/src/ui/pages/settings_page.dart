@@ -6,9 +6,10 @@ import 'package:provider/provider.dart';
 import '../../core/settings_models.dart';
 import '../../state/app_controller.dart';
 import '../../utils/logger.dart';
-import '../../core/url_config.dart';
 import '../../services/isp_warning_service.dart';
 import '../../services/windows_defender_service.dart';
+import '../../services/update_service.dart';
+import '../../widgets/update_tile.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -160,160 +161,22 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.memory),
-            title: const Text('核心版本'),
-            subtitle: Text('当前：$coreVersion'),
-            trailing: TextButton(
-              onPressed: () async {
-                if (!context.mounted) return;
-
-                final current = controller.coreVersion;
-                if (current == null || current.isEmpty) {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      title: const Text('下载核心'),
-                      content: const Text('当前未安装核心，是否立即下载并安装最新版本？'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('取消'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text('立即下载'),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (confirm == true) {
-                    try {
-                      await controller.coreRunner.ensureCorePresent();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('核心已下载并安装')),
-                        );
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('下载失败：$e')),
-                        );
-                      }
-                    }
-                  }
-                  return;
-                }
-
-                final msg = await controller.checkCoreVersionStatus();
-                if (!context.mounted) return;
-                showDialog<void>(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text('核心版本检查'),
-                    content: Text(msg),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('确定'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-              child: const Text('检查更新'),
-            ),
+          UpdateTile(
+            icon: Icons.phone_android,
+            title: '应用版本',
+            component: UpdateComponent.app,
           ),
           const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.hub),
-            title: const Text('EasyTier 组网核心'),
-            subtitle: Text('当前：${controller.easytierVersion ?? "未安装"}'),
-            trailing: TextButton(
-              onPressed: () async {
-                if (!context.mounted) return;
-
-                final easyTierService = controller.easyTierService;
-                final isInstalled = await easyTierService.isEasyTierInstalled();
-
-                if (!context.mounted) return;
-
-                if (isInstalled) {
-                  final msg = await controller.checkEasyTierVersionStatus();
-                  if (!context.mounted) return;
-                  showDialog<void>(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      title: const Text('EasyTier 版本检查'),
-                      content: Text(msg),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('确定'),
-                        ),
-                      ],
-                    ),
-                  );
-                  return;
-                }
-
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text('下载 EasyTier'),
-                    content: const Text('当前未安装 EasyTier，是否下载并安装？'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('取消'),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text('立即下载'),
-                      ),
-                    ],
-                  ),
-                );
-
-                if (confirm == true && context.mounted) {
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (_) => const AlertDialog(
-                      title: Text('下载中'),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text('正在下载 EasyTier...'),
-                        ],
-                      ),
-                    ),
-                  );
-
-                  try {
-                    await easyTierService.downloadEasyTier();
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('EasyTier 已安装')),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('下载失败：$e')),
-                      );
-                    }
-                  }
-                }
-              },
-              child: Text(controller.easytierVersion != null ? '检查更新' : '安装'),
-            ),
+          UpdateTile(
+            icon: Icons.memory,
+            title: '核心版本',
+            component: UpdateComponent.core,
+          ),
+          const Divider(height: 1),
+          UpdateTile(
+            icon: Icons.hub,
+            title: 'EasyTier 组网核心',
+            component: UpdateComponent.easytier,
           ),
           const Divider(height: 1),
           ListTile(

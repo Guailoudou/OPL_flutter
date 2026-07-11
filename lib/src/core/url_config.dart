@@ -18,18 +18,6 @@ class UrlConfig {
   static String get sponsorsApiUrl => '$_apiBase/api/sponsors';
   static String get releasesApiUrl => '$_apiBase/api/releases';
 
-  // EasyTier 下载 URL（多平台）
-  static String get easyTierDownloadUrl {
-    if (Platform.isWindows) {
-      return 'https://cdn.gh-proxy.org/https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-windows-x86_64-v2.6.4.zip';
-    } else if (Platform.isLinux) {
-      return 'https://cdn.gh-proxy.org/https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-linux-x86_64-v2.6.4.zip';
-    } else if (Platform.isMacOS) {
-      return 'https://cdn.gh-proxy.org/https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-macos-v2.6.4.zip';
-    }
-    throw UnsupportedError('Unsupported platform for EasyTier');
-  }
-
   // 基础 URL 配置（用于文件下载）
   static const String _baseUrl = 'https://file.gldhn.top/';
   static const String _giteeBaseUrl = 'https://gitee.com/guailoudou/urlfile/raw/main/';

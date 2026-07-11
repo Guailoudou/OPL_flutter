@@ -2,16 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:archive/archive.dart';
-import 'package:crypto/crypto.dart';
-import 'package:http/http.dart' as http;
-import 'package:path/path.dart' as p;
-
 import '../core/android_core_service.dart';
 import '../core/config_models.dart';
 import '../core/platform_paths.dart';
 import '../core/process_monitor.dart';
-import '../core/url_config.dart';
 import 'log_store.dart';
 import 'process_manager.dart';
 
@@ -30,107 +24,6 @@ class CoreRunner {
   ProcessMonitor? _processMonitor;
 
   bool get isRunning => _process != null || (_processManager?.isRunning ?? false);
-
-  Future<CoreRelease?> fetchLatestRelease() async {
-    if (!PlatformPaths.isDesktop) return null;
-    final resp = await http.get(Uri.parse(UrlConfig.releasesApiUrl));
-    if (resp.statusCode != 200) {
-      throw StateError('获取 releases 失败：HTTP ${resp.statusCode}');
-    }
-    final decoded = jsonDecode(resp.body);
-    if (decoded is! Map<String, dynamic>) {
-      throw StateError('releases 格式错误');
-    }
-    final coreData = decoded['core'];
-    if (coreData is! Map<String, dynamic>) {
-      throw StateError('releases.core 格式错误');
-    }
-    final platform = Platform.isWindows
-        ? 'windows'
-        : Platform.isLinux
-            ? 'linux'
-            : Platform.isMacOS
-                ? 'macos'
-                : null;
-    if (platform == null) return null;
-
-    final platformData = coreData[platform];
-    if (platformData is! Map<String, dynamic>) {
-      return null;
-    }
-
-    return CoreRelease.fromJson(platformData, platform);
-  }
-
-  Future<void> ensureCorePresent() async {
-    final core = await PlatformPaths.coreFile();
-    if (await core.exists()) return;
-
-    final release = await fetchLatestRelease();
-    if (release == null) {
-      throw StateError('未在 releases.json 中找到当前平台的核心文件');
-    }
-
-    final url = Uri.parse(release.url);
-    logs.add('[core] downloading: $url');
-    final resp = await http.get(url);
-    if (resp.statusCode != 200) {
-      throw StateError('核心下载失败：HTTP ${resp.statusCode}');
-    }
-
-    final bytes = resp.bodyBytes;
-    // 跳过 placeholder_hash 的校验
-    if (release.sha256.isNotEmpty && release.sha256 != 'placeholder_hash') {
-      final digest = sha256.convert(bytes).toString();
-      if (digest.toLowerCase() != release.sha256.toLowerCase()) {
-        throw StateError('核心文件校验失败（sha256 不匹配）');
-      }
-    }
-
-    final dir = await PlatformPaths.configDir();
-    final decoded = GZipDecoder().decodeBytes(bytes);
-    final archive = TarDecoder().decodeBytes(decoded);
-
-    File? extractedExe;
-    for (final file in archive.files) {
-      if (!file.isFile) continue;
-      final name = p.basename(file.name);
-      final outPath = p.join(dir.path, name);
-      final outFile = File(outPath);
-      await outFile.create(recursive: true);
-      await outFile.writeAsBytes(file.content as List<int>, flush: true);
-
-      final lower = name.toLowerCase();
-      if (Platform.isWindows) {
-        if (lower.endsWith('.exe')) {
-          extractedExe ??= outFile;
-        }
-      } else {
-        if (!lower.endsWith('.md')) {
-          extractedExe ??= outFile;
-        }
-      }
-    }
-
-    if (extractedExe == null) {
-      throw StateError('解压核心失败：未找到可执行文件');
-    }
-
-    if (extractedExe.path != core.path) {
-      await extractedExe.rename(core.path);
-    }
-
-    if (!Platform.isWindows) {
-      try {
-        await Process.run('chmod', ['+x', core.path]);
-      } catch (_) {
-        // ignore
-      }
-    }
-
-    logs.add('[core] downloaded: ${core.path}');
-    onCoreVersionChanged(release.version);
-  }
 
   Future<void> start(ConfigRoot config) async {
     if (Platform.isAndroid) {
@@ -312,32 +205,6 @@ class CoreRunner {
     unawaited(_errSub?.cancel());
     _outSub = null;
     _errSub = null;
-  }
-}
-
-class CoreRelease {
-  CoreRelease({
-    required this.platform,
-    required this.version,
-    required this.url,
-    required this.filename,
-    required this.sha256,
-  });
-
-  final String platform;
-  final String version;
-  final String url;
-  final String filename;
-  final String sha256;
-
-  factory CoreRelease.fromJson(Map<String, dynamic> json, String platform) {
-    return CoreRelease(
-      platform: platform,
-      version: json['version'] as String? ?? '',
-      url: json['url'] as String? ?? '',
-      filename: json['filename'] as String? ?? '',
-      sha256: json['hash'] as String? ?? '',
-    );
   }
 }
 
