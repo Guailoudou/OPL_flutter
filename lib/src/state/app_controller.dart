@@ -1,17 +1,25 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
+import 'package:url_launcher/url_launcher.dart';
 import '../core/config_models.dart';
 import '../core/config_store.dart';
 import '../core/notice_service.dart';
 import '../core/settings_models.dart';
 import '../core/settings_store.dart';
 import '../core/platform_paths.dart';
+import '../core/url_config.dart';
+import '../core/easytier_service.dart';
 import '../app/navigation.dart';
 import '../utils/logger.dart';
+import '../services/isp_warning_service.dart';
+import '../services/autostart_service.dart';
 import 'core_runner.dart';
 import 'log_store.dart';
 
@@ -20,6 +28,8 @@ class AppController extends ChangeNotifier {
   final _settingsStore = SettingsStore();
   final LogStore _logs;
   late final CoreRunner coreRunner;
+  final autoStartService = AutoStartService();
+  final easyTierService = EasyTierService();
 
   bool booting = true;
   String? bootError;
@@ -50,13 +60,22 @@ class AppController extends ChangeNotifier {
       
       config = await _store.loadOrCreate();
       settings = await _settingsStore.loadOrCreate();
+      // 初始化 URL 配置
+      UrlConfig.setApiBase(settings.apiBase);
+      UrlConfig.setUseGitee(settings.useGiteeMirror);
       logs.onNewLine = _handleLogLine;
       coreRunner = CoreRunner(
         logs: logs,
         onCoreVersionChanged: _updateCoreVersion,
       );
+      easyTierService.onVersionChanged = _updateEasyTierVersion;
+      // 检测已安装的 EasyTier 并更新版本号
+      await _checkInstalledEasyTier();
       // 预加载公告数据
       _preloadNotices();
+      // 检查主程序更新
+      _checkAppUpdate();
+      // 运营商检测已移除，不再在启动时自动检测
     } catch (e) {
       bootError = e.toString();
     } finally {
@@ -197,6 +216,194 @@ class AppController extends ChangeNotifier {
   // 刷新公告数据
   Future<void> refreshNotices() async {
     await _preloadNotices();
+  }
+
+  Future<void> _checkAppUpdate() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentVersion = packageInfo.version;
+
+      final resp = await http.get(Uri.parse(UrlConfig.releasesApiUrl));
+      if (resp.statusCode != 200) {
+        L.w('failed to fetch releases: HTTP ${resp.statusCode}', tag: 'app');
+        return;
+      }
+
+      final decoded = jsonDecode(resp.body);
+      if (decoded is! Map<String, dynamic>) {
+        L.w('releases response is not a map', tag: 'app');
+        return;
+      }
+
+      final appRelease = decoded['app'];
+      if (appRelease == null || appRelease is! Map<String, dynamic>) {
+        L.w('no app release info found', tag: 'app');
+        return;
+      }
+
+      final latestVersion = appRelease['version'] as String?;
+      if (latestVersion == null) {
+        L.w('no version in app release info', tag: 'app');
+        return;
+      }
+
+      // Compare versions (simple string comparison)
+      if (latestVersion != currentVersion) {
+        L.i('new version available: $latestVersion (current: $currentVersion)', tag: 'app');
+        
+        // 获取当前平台的下载 URL
+        final urlData = appRelease['url'];
+        String downloadUrl = '';
+        if (urlData is Map<String, dynamic>) {
+          final platform = Platform.isWindows
+              ? 'windows'
+              : Platform.isLinux
+                  ? 'linux'
+                  : Platform.isMacOS
+                      ? 'macos'
+                      : null;
+          if (platform != null) {
+            downloadUrl = urlData[platform] as String? ?? '';
+          }
+        }
+        
+        _showUpdateDialog(
+          currentVersion: currentVersion,
+          latestVersion: latestVersion,
+          changelog: appRelease['changelog'] as String? ?? '',
+          downloadUrl: downloadUrl,
+        );
+      } else {
+        L.d('app is up to date: $currentVersion', tag: 'app');
+      }
+    } catch (e) {
+      L.e('failed to check app update', tag: 'app', error: e);
+    }
+  }
+
+  Future<void> _checkIspWarning() async {
+    try {
+      L.d('checking ISP warning...', tag: 'app');
+
+      final ispService = IspWarningService();
+      final ispInfo = await ispService.fetchIspInfo();
+
+      if (ispInfo == null) {
+        L.w('failed to fetch ISP info', tag: 'app');
+        return;
+      }
+
+      L.d('ISP info: ${ispInfo.isp} (${ispInfo.ip})', tag: 'app');
+
+      if (ispService.shouldShowWarning(ispInfo.isp)) {
+        L.i('showing ISP warning for: ${ispInfo.isp}', tag: 'app');
+        _showIspWarningDialog(ispInfo.isp, ispService.getWarningMessage(ispInfo.isp));
+      } else {
+        L.d('ISP is mainstream, no warning needed', tag: 'app');
+      }
+    } catch (e) {
+      L.e('failed to check ISP warning', tag: 'app', error: e);
+    }
+  }
+
+  void _showIspWarningDialog(String isp, String message) {
+    final ctx = rootNavigatorKey.currentContext;
+    if (ctx == null) {
+      L.w('navigator context not ready, skipping ISP warning dialog', tag: 'app');
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        showDialog<void>(
+          context: ctx,
+          barrierDismissible: true,
+          builder: (_) => AlertDialog(
+            title: const Text('运营商警告'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('检测到您当前运营商为：$isp', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  Text(message),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('我知道了'),
+              ),
+            ],
+          ),
+        );
+      } catch (e) {
+        L.e('failed to show ISP warning dialog', tag: 'app', error: e);
+      }
+    });
+  }
+
+  void _showUpdateDialog({
+    required String currentVersion,
+    required String latestVersion,
+    required String changelog,
+    required String downloadUrl,
+  }) {
+    final ctx = rootNavigatorKey.currentContext;
+    if (ctx == null) {
+      L.w('navigator context not ready, skipping update dialog', tag: 'app');
+      return;
+    }
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        showDialog<void>(
+          context: ctx,
+          barrierDismissible: true,
+          builder: (_) => AlertDialog(
+            title: const Text('发现新版本'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('当前版本：$currentVersion'),
+                  Text('最新版本：$latestVersion'),
+                  const SizedBox(height: 12),
+                  if (changelog.isNotEmpty) ...[
+                    const Text('更新内容：', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(changelog),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('稍后'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  if (downloadUrl.isNotEmpty) {
+                    final url = Uri.parse(downloadUrl);
+                    if (await canLaunchUrl(url)) {
+                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                    }
+                  }
+                },
+                child: const Text('立即下载'),
+              ),
+            ],
+          ),
+        );
+      } catch (e) {
+        L.e('failed to show update dialog', tag: 'app', error: e);
+      }
+    });
   }
 
   void _showNoticeDialog(Notice notice) {
@@ -431,12 +638,41 @@ class AppController extends ChangeNotifier {
     await _settingsStore.save(settings);
   }
 
+  Future<void> setUseGiteeMirror(bool value) async {
+    settings = settings.copyWith(useGiteeMirror: value);
+    UrlConfig.setUseGitee(value);
+    notifyListeners();
+    await _settingsStore.save(settings);
+  }
+
   String? get coreVersion => settings.coreVersion;
+  String? get easytierVersion => settings.easytierVersion;
 
   void _updateCoreVersion(String version) {
     settings = settings.copyWith(coreVersion: version);
     _settingsStore.save(settings);
     notifyListeners();
+  }
+
+  void _updateEasyTierVersion(String version) {
+    settings = settings.copyWith(easytierVersion: version);
+    _settingsStore.save(settings);
+    notifyListeners();
+  }
+
+  Future<void> _checkInstalledEasyTier() async {
+    try {
+      final isInstalled = await easyTierService.isEasyTierInstalled();
+      if (isInstalled) {
+        final version = await easyTierService.getEasyTierVersion();
+        if (version != null && version != settings.easytierVersion) {
+          _updateEasyTierVersion(version);
+          L.i('EasyTier detected: version $version', tag: 'app');
+        }
+      }
+    } catch (e) {
+      L.e('Failed to check installed EasyTier', tag: 'app', error: e);
+    }
   }
 
   Future<String> checkCoreVersionStatus() async {
@@ -450,6 +686,45 @@ class AppController extends ChangeNotifier {
       return '当前已是最新版：$current';
     }
     return '当前版本：$current\n最新版本：${latest.version}';
+  }
+
+  Future<String> checkEasyTierVersionStatus() async {
+    try {
+      final resp = await http.get(Uri.parse(UrlConfig.releasesApiUrl));
+      if (resp.statusCode != 200) return '无法获取远程版本信息';
+
+      final decoded = jsonDecode(resp.body);
+      if (decoded is! Map<String, dynamic>) return '版本信息格式错误';
+
+      final easytierData = decoded['easytier'];
+      if (easytierData is! Map<String, dynamic>) return 'EasyTier 版本信息缺失';
+
+      final platform = Platform.isWindows
+          ? 'windows'
+          : Platform.isLinux
+              ? 'linux'
+              : Platform.isMacOS
+                  ? 'macos'
+                  : null;
+      if (platform == null) return '不支持的平台';
+
+      final platformData = easytierData[platform];
+      if (platformData is! Map<String, dynamic>) return '平台版本信息缺失';
+
+      final latestVersion = platformData['version'] as String?;
+      if (latestVersion == null) return '远程版本信息缺失';
+
+      final currentVersion = settings.easytierVersion;
+      if (currentVersion == null || currentVersion.isEmpty) {
+        return '当前未安装 EasyTier。\n最新版本：$latestVersion';
+      }
+      if (currentVersion == latestVersion) {
+        return '当前已是最新版：$currentVersion';
+      }
+      return '当前版本：$currentVersion\n最新版本：$latestVersion';
+    } catch (e) {
+      return '检查失败：$e';
+    }
   }
 
   // === Log pattern handling ===

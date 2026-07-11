@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../state/app_controller.dart';
+import 'diagnostic_page.dart';
 import 'logs_page.dart';
 import 'me_page.dart';
+import 'network_page.dart';
 import 'notices_page.dart';
 import 'settings_page.dart';
 import 'tunnels_page.dart';
@@ -59,6 +61,8 @@ class _HomeShellState extends State<HomeShell> {
 
     final pages = const [
       TunnelsPage(),
+      NetworkPage(),
+      DiagnosticPage(),
       LogsPage(),
       NoticesPage(),
       SettingsPage(),
@@ -80,6 +84,14 @@ class _HomeShellState extends State<HomeShell> {
                 NavigationRailDestination(
                   icon: Icon(Icons.tune),
                   label: Text('隧道'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.hub),
+                  label: Text('组网'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.network_check),
+                  label: Text('诊断'),
                 ),
                 NavigationRailDestination(
                   icon: Icon(Icons.receipt_long),
@@ -113,6 +125,7 @@ class _HomeShellState extends State<HomeShell> {
         onDestinationSelected: (i) => setState(() => index = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.tune), label: '隧道'),
+          NavigationDestination(icon: Icon(Icons.hub), label: '组网'),
           NavigationDestination(icon: Icon(Icons.receipt_long), label: '日志'),
           NavigationDestination(icon: Icon(Icons.notifications), label: '公告'),
           NavigationDestination(icon: Icon(Icons.settings), label: '设置'),

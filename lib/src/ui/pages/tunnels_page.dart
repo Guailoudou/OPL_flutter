@@ -5,10 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/config_models.dart';
+import '../../core/connection_code.dart';
 import '../../core/platform_paths.dart';
 import '../../state/app_controller.dart';
 import '../../state/log_store.dart';
 import '../widgets/status_dot.dart';
+import 'preset_page.dart';
 
 class TunnelsPage extends StatelessWidget {
   const TunnelsPage({super.key});
@@ -27,6 +29,16 @@ class TunnelsPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('隧道'),
         actions: [
+          IconButton(
+            tooltip: '预设隧道',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PresetPage()),
+              );
+            },
+            icon: const Icon(Icons.list_alt),
+          ),
           IconButton(
             tooltip: '刷新配置',
             onPressed: controller.reloadConfig,
@@ -88,6 +100,15 @@ class TunnelsPage extends StatelessWidget {
                           );
                         }
                         return;
+                      case _TunnelAction.exportCode:
+                        final code = ConnectionCode.generate(tunnel);
+                        await Clipboard.setData(ClipboardData(text: code));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('已复制连接码：$code')),
+                          );
+                        }
+                        return;
                       case _TunnelAction.delete:
                         if (controller.coreRunning) {
                           await _showConfigLockedDialog(context);
@@ -135,6 +156,13 @@ class TunnelsPage extends StatelessWidget {
           if (created != null) {
             await controller.upsertTunnel(created);
           }
+        },
+        onQuickAdd: () async {
+          if (controller.coreRunning) {
+            await _showConfigLockedDialog(context);
+            return;
+          }
+          await _showQuickAddDialog(context, controller);
         },
         onStart: () async {
           try {
@@ -328,7 +356,7 @@ Color _statusColor(BuildContext context, _TunnelStatus s) {
   }
 }
 
-enum _TunnelAction { edit, copyIp, delete }
+enum _TunnelAction { edit, copyIp, exportCode, delete }
 
 class _TunnelTile extends StatelessWidget {
   const _TunnelTile({
@@ -359,6 +387,7 @@ class _TunnelTile extends StatelessWidget {
         items: const [
           PopupMenuItem(value: _TunnelAction.edit, child: Text('编辑')),
           PopupMenuItem(value: _TunnelAction.copyIp, child: Text('复制 IP')),
+          PopupMenuItem(value: _TunnelAction.exportCode, child: Text('导出连接码')),
           PopupMenuItem(value: _TunnelAction.delete, child: Text('删除')),
         ],
       );
@@ -426,9 +455,15 @@ class _TunnelTile extends StatelessWidget {
 }
 
 class _FabRow extends StatelessWidget {
-  const _FabRow({required this.onAdd, required this.onStart, required this.isRunning});
+  const _FabRow({
+    required this.onAdd,
+    required this.onQuickAdd,
+    required this.onStart,
+    required this.isRunning,
+  });
 
   final VoidCallback onAdd;
+  final VoidCallback onQuickAdd;
   final VoidCallback onStart;
   final bool isRunning;
 
@@ -438,14 +473,23 @@ class _FabRow extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         FloatingActionButton(
+          heroTag: 'quickAdd',
+          onPressed: onQuickAdd,
+          tooltip: '快速添加（连接码）',
+          child: const Icon(Icons.qr_code_scanner),
+        ),
+        const SizedBox(width: 12),
+        FloatingActionButton(
           heroTag: 'add',
           onPressed: onAdd,
+          tooltip: '手动添加',
           child: const Icon(Icons.add),
         ),
         const SizedBox(width: 12),
         FloatingActionButton(
           heroTag: 'start',
           onPressed: onStart,
+          tooltip: isRunning ? '停止' : '启动',
           child: Icon(isRunning ? Icons.pause : Icons.play_arrow),
         ),
       ],
@@ -660,4 +704,78 @@ class _Field extends StatelessWidget {
     );
   }
 }
+
+Future<void> _showQuickAddDialog(BuildContext context, AppController controller) async {
+  final codeController = TextEditingController();
+  
+  await showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('快速添加隧道'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '请输入连接码，支持以下格式：\n'
+            '• 标准格式：协议:UID:远程端口:本地端口\n'
+            '• 简化格式：UID:远程端口\n'
+            '• 多个连接用分号分隔',
+            style: TextStyle(fontSize: 12),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: codeController,
+            decoration: const InputDecoration(
+              labelText: '连接码',
+              hintText: '例如：1:abc123:25565:25565',
+              border: OutlineInputBorder(),
+            ),
+            maxLines: 3,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final code = codeController.text.trim();
+            if (code.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('请输入连接码')),
+              );
+              return;
+            }
+
+            final result = ConnectionCode.parse(code);
+            if (!result.isSuccess) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('解析失败：${result.error}')),
+              );
+              return;
+            }
+
+            for (final tunnel in result.tunnels) {
+              await controller.upsertTunnel(tunnel);
+            }
+
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('已添加 ${result.tunnels.length} 个隧道')),
+              );
+              Navigator.pop(context);
+            }
+          },
+          child: const Text('添加'),
+        ),
+      ],
+    ),
+  );
+  
+  codeController.dispose();
+}
+
 

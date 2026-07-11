@@ -3,5 +3,6 @@
   "coreVersion": "ef4bc1e-dirty",
   "lastNoticeTime": "2026-2-15 19:03:31",
   "runInBackground": false,
-  "askBeforeMinimize": false
+  "askBeforeMinimize": false,
+  "useGiteeMirror": false
 }

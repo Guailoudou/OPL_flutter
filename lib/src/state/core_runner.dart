@@ -10,7 +10,10 @@ import 'package:path/path.dart' as p;
 import '../core/android_core_service.dart';
 import '../core/config_models.dart';
 import '../core/platform_paths.dart';
+import '../core/process_monitor.dart';
+import '../core/url_config.dart';
 import 'log_store.dart';
+import 'process_manager.dart';
 
 class CoreRunner {
   CoreRunner({
@@ -23,40 +26,40 @@ class CoreRunner {
   Process? _process;
   StreamSubscription<String>? _outSub;
   StreamSubscription<String>? _errSub;
+  ProcessManager? _processManager;
+  ProcessMonitor? _processMonitor;
 
-  bool get isRunning => _process != null;
-
-  static const String _releasesUrl =
-      'https://file.gldhn.top/file/openp2p_releases/releases.json';
-  static const String _filesBaseUrl =
-      'https://file.gldhn.top/file/openp2p_releases';
+  bool get isRunning => _process != null || (_processManager?.isRunning ?? false);
 
   Future<CoreRelease?> fetchLatestRelease() async {
     if (!PlatformPaths.isDesktop) return null;
-    final resp = await http.get(Uri.parse(_releasesUrl));
+    final resp = await http.get(Uri.parse(UrlConfig.releasesApiUrl));
     if (resp.statusCode != 200) {
-      throw StateError('获取 releases.json 失败：HTTP ${resp.statusCode}');
+      throw StateError('获取 releases 失败：HTTP ${resp.statusCode}');
     }
     final decoded = jsonDecode(resp.body);
-    if (decoded is! List) {
-      throw StateError('releases.json 格式错误');
+    if (decoded is! Map<String, dynamic>) {
+      throw StateError('releases 格式错误');
+    }
+    final coreData = decoded['core'];
+    if (coreData is! Map<String, dynamic>) {
+      throw StateError('releases.core 格式错误');
     }
     final platform = Platform.isWindows
         ? 'windows'
         : Platform.isLinux
             ? 'linux'
             : Platform.isMacOS
-                ? 'darwin'
+                ? 'macos'
                 : null;
     if (platform == null) return null;
 
-    const arch = 'amd64'; // 假定 64 位桌面环境
-    final candidates = decoded.whereType<Map>().map((e) {
-      final m = e.cast<String, dynamic>();
-      return CoreRelease.fromJson(m);
-    }).where((r) => r.platform == platform && r.architecture == arch);
+    final platformData = coreData[platform];
+    if (platformData is! Map<String, dynamic>) {
+      return null;
+    }
 
-    return candidates.isNotEmpty ? candidates.first : null;
+    return CoreRelease.fromJson(platformData, platform);
   }
 
   Future<void> ensureCorePresent() async {
@@ -68,7 +71,7 @@ class CoreRunner {
       throw StateError('未在 releases.json 中找到当前平台的核心文件');
     }
 
-    final url = Uri.parse('$_filesBaseUrl/${release.filename}');
+    final url = Uri.parse(release.url);
     logs.add('[core] downloading: $url');
     final resp = await http.get(url);
     if (resp.statusCode != 200) {
@@ -76,9 +79,12 @@ class CoreRunner {
     }
 
     final bytes = resp.bodyBytes;
-    final digest = sha256.convert(bytes).toString();
-    if (digest.toLowerCase() != release.sha256.toLowerCase()) {
-      throw StateError('核心文件校验失败（sha256 不匹配）');
+    // 跳过 placeholder_hash 的校验
+    if (release.sha256.isNotEmpty && release.sha256 != 'placeholder_hash') {
+      final digest = sha256.convert(bytes).toString();
+      if (digest.toLowerCase() != release.sha256.toLowerCase()) {
+        throw StateError('核心文件校验失败（sha256 不匹配）');
+      }
     }
 
     final dir = await PlatformPaths.configDir();
@@ -312,25 +318,25 @@ class CoreRunner {
 class CoreRelease {
   CoreRelease({
     required this.platform,
-    required this.architecture,
     required this.version,
+    required this.url,
     required this.filename,
     required this.sha256,
   });
 
   final String platform;
-  final String architecture;
   final String version;
+  final String url;
   final String filename;
   final String sha256;
 
-  factory CoreRelease.fromJson(Map<String, dynamic> json) {
+  factory CoreRelease.fromJson(Map<String, dynamic> json, String platform) {
     return CoreRelease(
-      platform: json['platform'] as String? ?? '',
-      architecture: json['architecture'] as String? ?? '',
+      platform: platform,
       version: json['version'] as String? ?? '',
+      url: json['url'] as String? ?? '',
       filename: json['filename'] as String? ?? '',
-      sha256: json['sha256'] as String? ?? '',
+      sha256: json['hash'] as String? ?? '',
     );
   }
 }

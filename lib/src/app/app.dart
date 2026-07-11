@@ -196,7 +196,12 @@ class _AppRootState extends State<AppRoot> with WindowListener {
 
   Future<void> _handleAppExit() async {
     final controller = Provider.of<AppController>(context, listen: false);
-    
+
+    // Stop EasyTier if running
+    if (controller.easyTierService.isRunning) {
+      await controller.easyTierService.stop();
+    }
+
     // Stop core if running
     if (controller.coreRunning) {
       await controller.stopCore();

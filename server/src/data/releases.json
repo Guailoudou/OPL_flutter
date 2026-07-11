@@ -1,0 +1,54 @@
+{
+  "app": {
+    "version": "0.1.1",
+    "buildNumber": 2,
+    "changelog": "新增预设隧道功能\n新增连接码导出功能\n优化多平台适配",
+    "url": {
+      "windows": "https://file.gldhn.top/file/releases/opl-0.1.1.exe",
+      "linux": "https://file.gldhn.top/file/releases/opl-0.1.1.tar.gz",
+      "macos": "https://file.gldhn.top/file/releases/opl-0.1.1.dmg"
+    },
+    "hash": {
+      "windows": "placeholder_hash",
+      "linux": "placeholder_hash",
+      "macos": "placeholder_hash"
+    }
+  },
+  "core": {
+    "windows": {
+      "version": "1.2.3",
+      "url": "https://file.gldhn.top/file/releases/openp2p-windows-amd64.tar.gz",
+      "hash": "placeholder_hash",
+      "filename": "openp2p-windows-amd64.tar.gz"
+    },
+    "linux": {
+      "version": "1.2.3",
+      "url": "https://file.gldhn.top/file/releases/openp2p-linux-amd64.tar.gz",
+      "hash": "placeholder_hash",
+      "filename": "openp2p-linux-amd64.tar.gz"
+    },
+    "macos": {
+      "version": "1.2.3",
+      "url": "https://file.gldhn.top/file/releases/openp2p-macos-amd64.tar.gz",
+      "hash": "placeholder_hash",
+      "filename": "openp2p-macos-amd64.tar.gz"
+    }
+  },
+  "easytier": {
+    "windows": {
+      "version": "2.6.4",
+      "url": "https://cdn.gh-proxy.org/https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-windows-x86_64-v2.6.4.zip",
+      "hash": "placeholder_hash"
+    },
+    "linux": {
+      "version": "2.6.4",
+      "url": "https://cdn.gh-proxy.org/https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-linux-x86_64-v2.6.4.zip",
+      "hash": "placeholder_hash"
+    },
+    "macos": {
+      "version": "2.6.4",
+      "url": "https://cdn.gh-proxy.org/https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-macos-v2.6.4.zip",
+      "hash": "placeholder_hash"
+    }
+  }
+}

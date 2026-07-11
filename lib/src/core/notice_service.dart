@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+import 'url_config.dart';
+
 class Notice {
   Notice({
     required this.title,
@@ -38,12 +40,9 @@ class NoticeResponse {
 }
 
 class NoticeService {
-  static const String _noticeUrl =
-      'https://file.gldhn.top/file/json/notice.json';
-
   Future<NoticeResponse?> fetchNotices() async {
     try {
-      final resp = await http.get(Uri.parse(_noticeUrl));
+      final resp = await http.get(Uri.parse(UrlConfig.noticesApiUrl));
       if (resp.statusCode != 200) {
         return null;
       }

@@ -3,6 +3,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/sponsor_models.dart';
+import '../../core/sponsor_service.dart';
 import '../../state/app_controller.dart';
 
 class MePage extends StatelessWidget {
@@ -130,6 +132,20 @@ class MePage extends StatelessWidget {
           const SizedBox(height: 12),
           Card(
             child: ListTile(
+              leading: const Icon(Icons.favorite_outline),
+              title: const Text('赞助名单'),
+              subtitle: const Text('感谢所有赞助者'),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SponsorListPage()),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
               leading: const Icon(Icons.info_outline),
               title: const Text('关于'),
               subtitle: const Text('版本信息 / 作者 / Bug 反馈'),
@@ -250,5 +266,171 @@ Future<void> _showConfigLockedDialog(BuildContext context) async {
       ],
     ),
   );
+}
+
+class SponsorListPage extends StatefulWidget {
+  const SponsorListPage({super.key});
+
+  @override
+  State<SponsorListPage> createState() => _SponsorListPageState();
+}
+
+class _SponsorListPageState extends State<SponsorListPage> {
+  final SponsorService _sponsorService = SponsorService();
+  List<Sponsor> _sponsors = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSponsors();
+  }
+
+  Future<void> _loadSponsors() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final response = await _sponsorService.fetchSponsors();
+      if (mounted) {
+        setState(() {
+          _sponsors = response?.sponsors ?? [];
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('赞助名单'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadSponsors,
+          ),
+        ],
+      ),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 16),
+            Text('加载失败: $_error'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadSponsors,
+              child: const Text('重试'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_sponsors.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.favorite_border, size: 48, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('暂无赞助记录'),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _sponsors.length,
+      itemBuilder: (context, index) {
+        final sponsor = _sponsors[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.favorite, color: Colors.red, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        sponsor.name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '¥${sponsor.amount.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          color: Colors.red.shade700,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (sponsor.message != null && sponsor.message!.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    sponsor.message!,
+                    style: TextStyle(
+                      color: Colors.grey.shade700,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  sponsor.time,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
