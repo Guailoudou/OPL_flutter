@@ -39,14 +39,13 @@ class UpdateService extends ChangeNotifier {
   };
 
   ReleaseInfo? _cachedRelease;
-  final void Function(String version)? _onCoreVersionChanged;
-  final void Function(String version)? _onEasytierVersionChanged;
+  void Function(String version)? onCoreVersionChanged;
+  void Function(String version)? onEasytierVersionChanged;
 
   UpdateService({
-    void Function(String version)? onCoreVersionChanged,
-    void Function(String version)? onEasytierVersionChanged,
-  })  : _onCoreVersionChanged = onCoreVersionChanged,
-        _onEasytierVersionChanged = onEasytierVersionChanged;
+    this.onCoreVersionChanged,
+    this.onEasytierVersionChanged,
+  });
 
   // === Public API ===
 
@@ -205,14 +204,14 @@ class UpdateService extends ChangeNotifier {
         case UpdateComponent.core:
           await _extractCore(bytes, version);
           _installedVersions[UpdateComponent.core] = version;
-          _onCoreVersionChanged?.call(version);
+          onCoreVersionChanged?.call(version);
           break;
         case UpdateComponent.easytier:
           await _extractEasyTier(bytes, version);
           // Detect actual version
           final actualVersion = await _getEasyTierVersion() ?? version;
           _installedVersions[UpdateComponent.easytier] = actualVersion;
-          _onEasytierVersionChanged?.call(actualVersion);
+          onEasytierVersionChanged?.call(actualVersion);
           break;
         case UpdateComponent.app:
           await _installApp(bytes, version);

@@ -25,6 +25,7 @@ class SettingsPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: ListView(
         children: [
           // Gitee mirror setting
@@ -35,10 +36,11 @@ class SettingsPage extends StatelessWidget {
             trailing: Switch(
               value: useGiteeMirror,
               onChanged: (value) async {
-                L.d('useGiteeMirror: $useGiteeMirror -> $value', tag: 'settings');
-                
+                L.d('useGiteeMirror: $useGiteeMirror -> $value',
+                    tag: 'settings');
+
                 await controller.setUseGiteeMirror(value);
-                
+
                 L.d('Updated to $value', tag: 'settings');
               },
             ),
@@ -53,16 +55,18 @@ class SettingsPage extends StatelessWidget {
               trailing: Switch(
                 value: runInBackground,
                 onChanged: (value) async {
-                  L.d('runInBackground: $runInBackground -> $value', tag: 'settings');
-                  
+                  L.d('runInBackground: $runInBackground -> $value',
+                      tag: 'settings');
+
                   await controller.settingsStore.save(
                     controller.settings.copyWith(runInBackground: value),
                   );
-                  
+
                   // Update controller settings
-                  controller.settings = controller.settings.copyWith(runInBackground: value);
+                  controller.settings =
+                      controller.settings.copyWith(runInBackground: value);
                   controller.notifyListeners();
-                  
+
                   L.d('Updated to $value', tag: 'settings');
                 },
               ),
@@ -75,16 +79,18 @@ class SettingsPage extends StatelessWidget {
               trailing: Switch(
                 value: askBeforeMinimize,
                 onChanged: (value) async {
-                  L.d('askBeforeMinimize: $askBeforeMinimize -> $value', tag: 'settings');
-                  
+                  L.d('askBeforeMinimize: $askBeforeMinimize -> $value',
+                      tag: 'settings');
+
                   await controller.settingsStore.save(
                     controller.settings.copyWith(askBeforeMinimize: value),
                   );
-                  
+
                   // Update controller settings
-                  controller.settings = controller.settings.copyWith(askBeforeMinimize: value);
+                  controller.settings =
+                      controller.settings.copyWith(askBeforeMinimize: value);
                   controller.notifyListeners();
-                  
+
                   L.d('Updated to $value', tag: 'settings');
                 },
               ),
@@ -119,65 +125,60 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.power_settings_new),
-            title: const Text('开机自启动'),
-            subtitle: const Text('系统启动时自动运行程序'),
-            trailing: Switch(
-              value: controller.settings.autoStart,
-              onChanged: (value) async {
-                L.d('autoStart: ${controller.settings.autoStart} -> $value', tag: 'settings');
-                
-                try {
-                  if (value) {
-                    await controller.autoStartService.enable();
-                  } else {
-                    await controller.autoStartService.disable();
-                  }
-                  
-                  await controller.settingsStore.save(
-                    controller.settings.copyWith(autoStart: value),
-                  );
-                  
-                  controller.settings = controller.settings.copyWith(autoStart: value);
-                  controller.notifyListeners();
-                  
-                  L.d('Updated to $value', tag: 'settings');
-                  
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(value ? '已启用开机自启动' : '已禁用开机自启动')),
+          if (!Platform.isAndroid) ...[
+            ListTile(
+              leading: const Icon(Icons.power_settings_new),
+              title: const Text('开机自启动'),
+              subtitle: const Text('系统启动时自动运行程序'),
+              trailing: Switch(
+                value: controller.settings.autoStart,
+                onChanged: (value) async {
+                  L.d('autoStart: ${controller.settings.autoStart} -> $value',
+                      tag: 'settings');
+                  try {
+                    if (value) {
+                      await controller.autoStartService.enable();
+                    } else {
+                      await controller.autoStartService.disable();
+                    }
+                    await controller.settingsStore.save(
+                      controller.settings.copyWith(autoStart: value),
                     );
+                    controller.settings =
+                        controller.settings.copyWith(autoStart: value);
+                    controller.notifyListeners();
+                  } catch (e) {
+                    L.e('设置开机自启动失败: $e', tag: 'settings');
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('设置失败: $e')),
+                      );
+                    }
                   }
-                } catch (e) {
-                  L.e('设置开机自启动失败: $e', tag: 'settings');
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('设置失败: $e')),
-                    );
-                  }
-                }
-              },
+                },
+              ),
             ),
-          ),
-          const Divider(height: 1),
+            const Divider(height: 1),
+          ],
           UpdateTile(
             icon: Icons.phone_android,
             title: '应用版本',
             component: UpdateComponent.app,
           ),
-          const Divider(height: 1),
-          UpdateTile(
-            icon: Icons.memory,
-            title: '核心版本',
-            component: UpdateComponent.core,
-          ),
-          const Divider(height: 1),
-          UpdateTile(
-            icon: Icons.hub,
-            title: 'EasyTier 组网核心',
-            component: UpdateComponent.easytier,
-          ),
+          if (!Platform.isAndroid) ...[
+            const Divider(height: 1),
+            UpdateTile(
+              icon: Icons.memory,
+              title: '核心版本',
+              component: UpdateComponent.core,
+            ),
+            const Divider(height: 1),
+            UpdateTile(
+              icon: Icons.hub,
+              title: 'EasyTier 组网核心',
+              component: UpdateComponent.easytier,
+            ),
+          ],
           const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.network_wifi),
@@ -189,7 +190,8 @@ class SettingsPage extends StatelessWidget {
 
                 try {
                   final ispService = IspWarningService();
-                  final ispInfo = await ispService.fetchIspInfo(forceRefresh: true);
+                  final ispInfo =
+                      await ispService.fetchIspInfo(forceRefresh: true);
 
                   if (!context.mounted) return;
 
@@ -212,7 +214,8 @@ class SettingsPage extends StatelessWidget {
                         children: [
                           Text('IP 地址：${ispInfo.ip}'),
                           Text('运营商：${ispInfo.isp}'),
-                          if (ispInfo.region != null) Text('地区：${ispInfo.region}'),
+                          if (ispInfo.region != null)
+                            Text('地区：${ispInfo.region}'),
                           if (ispInfo.city != null) Text('城市：${ispInfo.city}'),
                           const SizedBox(height: 12),
                           if (isMainstream)
@@ -288,7 +291,8 @@ class SettingsPage extends StatelessWidget {
                         context: context,
                         builder: (_) => AlertDialog(
                           title: const Text('移除排除项'),
-                          content: const Text('程序已在 Windows Defender 排除列表中，是否移除？'),
+                          content:
+                              const Text('程序已在 Windows Defender 排除列表中，是否移除？'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context, false),
@@ -306,7 +310,8 @@ class SettingsPage extends StatelessWidget {
                         await defenderService.removeExclusion();
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('已移除 Windows Defender 排除项')),
+                            const SnackBar(
+                                content: Text('已移除 Windows Defender 排除项')),
                           );
                         }
                       }
@@ -315,7 +320,8 @@ class SettingsPage extends StatelessWidget {
                         context: context,
                         builder: (_) => AlertDialog(
                           title: const Text('添加排除项'),
-                          content: const Text('将程序添加到 Windows Defender 排除列表，防止被误删？'),
+                          content:
+                              const Text('将程序添加到 Windows Defender 排除列表，防止被误删？'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context, false),
@@ -333,7 +339,8 @@ class SettingsPage extends StatelessWidget {
                         await defenderService.addExclusion();
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('已添加 Windows Defender 排除项')),
+                            const SnackBar(
+                                content: Text('已添加 Windows Defender 排除项')),
                           );
                         }
                       }
@@ -356,4 +363,3 @@ class SettingsPage extends StatelessWidget {
     );
   }
 }
-

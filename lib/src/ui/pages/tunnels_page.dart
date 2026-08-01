@@ -180,7 +180,7 @@ class TunnelsPage extends StatelessWidget {
               await controller.startCore();
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('已启动核心（桌面端）')),
+                  const SnackBar(content: Text('已启动核心')),
                 );
               }
             }
@@ -334,6 +334,19 @@ _TunnelStatus _resolveStatus(
   final portStr = t.srcPort.toString();
   for (final line in lines.reversed.take(500)) {
     final l = line.toLowerCase();
+
+    // Ignore stale LISTEN/START records from a previous core session.
+    if (l.contains('[core] stopped') ||
+        l.contains('[core] exited') ||
+        l.contains('[core] failed')) {
+      return _TunnelStatus.disabled;
+    }
+    if (l.contains('[core] starting new session') ||
+        l.contains('[core] starting android core') ||
+        l.contains('[core] starting core:')) {
+      return _TunnelStatus.starting;
+    }
+
     if (!l.contains(listenTag)) continue;
     if (!l.contains(proto)) continue;
     if (!l.contains(':$portStr')) continue;
@@ -777,5 +790,3 @@ Future<void> _showQuickAddDialog(BuildContext context, AppController controller)
   
   codeController.dispose();
 }
-
-

@@ -1,6 +1,8 @@
 package com.example.opl_config_manager
 
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -16,8 +18,40 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "startCore" -> {
                     val baseDir = call.argument<String>("baseDir") ?: ""
-                    startCoreNative(baseDir)
-                    result.success(true)
+                    val token = call.argument<String>("token") ?: ""
+                    val shareBandwidth = call.argument<Int>("shareBandwidth") ?: 0
+                    val logLevel = call.argument<Int>("logLevel") ?: 1
+                    val intent = Intent(this, Openp2pCoreService::class.java).apply {
+                        action = Openp2pCoreService.ACTION_START
+                        putExtra(Openp2pCoreService.EXTRA_BASE_DIR, baseDir)
+                        putExtra(Openp2pCoreService.EXTRA_TOKEN, token)
+                        putExtra(Openp2pCoreService.EXTRA_SHARE_BANDWIDTH, shareBandwidth)
+                        putExtra(Openp2pCoreService.EXTRA_LOG_LEVEL, logLevel)
+                    }
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(intent)
+                        } else {
+                            startService(intent)
+                        }
+                        result.success(true)
+                    } catch (e: Throwable) {
+                        Log.e("OPL", "Failed to start core service", e)
+                        result.success(false)
+                    }
+                }
+                "stopCore" -> {
+                    try {
+                        val intent = Intent(this, Openp2pCoreService::class.java).apply {
+                            action = Openp2pCoreService.ACTION_STOP
+                        }
+                        startService(intent)
+                        stopService(intent)
+                        result.success(true)
+                    } catch (e: Throwable) {
+                        Log.e("OPL", "Failed to stop core service", e)
+                        result.success(false)
+                    }
                 }
                 else -> {
                     result.notImplemented()
@@ -25,22 +59,4 @@ class MainActivity : FlutterActivity() {
             }
         }
     }
-    
-    private fun startCoreNative(baseDir: String) {
-        try {
-            Log.d("OPL", "Starting core with baseDir: $baseDir")
-            
-            // Load the native library
-            System.loadLibrary("openp2p")
-            
-            // Call the native function
-            RunOHOS(baseDir)
-            
-            Log.d("OPL", "Core started successfully")
-        } catch (e: Exception) {
-            Log.e("OPL", "Failed to start core: ${e.message}", e)
-        }
-    }
-    
-    private external fun RunOHOS(baseDir: String)
 }

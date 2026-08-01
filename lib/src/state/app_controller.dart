@@ -25,7 +25,7 @@ class AppController extends ChangeNotifier {
   final _settingsStore = SettingsStore();
   final LogStore _logs;
   late final CoreRunner coreRunner;
-  late final UpdateService updateService;
+  final UpdateService updateService;
   final autoStartService = AutoStartService();
   final easyTierService = EasyTierService();
 
@@ -43,7 +43,9 @@ class AppController extends ChangeNotifier {
   
   LogStore get logs => _logs;
 
-  AppController({LogStore? logStore}) : _logs = logStore ?? LogStore();
+  AppController({LogStore? logStore})
+      : _logs = logStore ?? LogStore(),
+        updateService = UpdateService();
   
   // 暴露公告数据供页面使用
   List<Notice> get cachedNotices => _cachedNotices;
@@ -58,6 +60,12 @@ class AppController extends ChangeNotifier {
 
       config = await _store.loadOrCreate();
       settings = await _settingsStore.loadOrCreate();
+      // Migrate the old desktop default. On Android, localhost points to the
+      // phone itself and makes the configured backend unreachable.
+      if (settings.apiBase == 'http://localhost:3000') {
+        settings = settings.copyWith(apiBase: UrlConfig.defaultApiBase);
+        await _settingsStore.save(settings);
+      }
       // 初始化 URL 配置
       UrlConfig.setApiBase(settings.apiBase);
       UrlConfig.setUseGitee(settings.useGiteeMirror);
@@ -68,11 +76,10 @@ class AppController extends ChangeNotifier {
       );
       easyTierService.onVersionChanged = _updateEasyTierVersion;
 
-      // 初始化 UpdateService
-      updateService = UpdateService(
-        onCoreVersionChanged: _updateCoreVersion,
-        onEasytierVersionChanged: _updateEasyTierVersion,
-      );
+      // 初始化 UpdateService 回调
+      updateService
+        ..onCoreVersionChanged = _updateCoreVersion
+        ..onEasytierVersionChanged = _updateEasyTierVersion;
       await updateService.detectInstalledVersions();
       await updateService.checkAllUpdates();
 
@@ -478,6 +485,7 @@ class AppController extends ChangeNotifier {
     if (_coreLoggedIn) {
       _coreLoggedIn = false;
     }
+    _logs.add('[core] starting new session');
     await coreRunner.start(current);
     notifyListeners();
   }
@@ -488,6 +496,7 @@ class AppController extends ChangeNotifier {
     if (_coreLoggedIn) {
       _coreLoggedIn = false;
     }
+    _logs.add('[core] stopped');
     notifyListeners();
   }
 
@@ -602,4 +611,3 @@ class AppController extends ChangeNotifier {
     );
   }
 }
-

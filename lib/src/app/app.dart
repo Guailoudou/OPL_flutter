@@ -25,16 +25,18 @@ class _AppRootState extends State<AppRoot> with WindowListener {
   @override
   void initState() {
     super.initState();
-    windowManager.addListener(this);
-    
-    // 添加此行以覆盖默认的关闭处理程序
-    _initPreventClose();
-    
-    // Initialize tray icon on Windows
-    if (Platform.isWindows) {
-      _initTrayIcon();
+    if (_isDesktop) {
+      windowManager.addListener(this);
+      _initPreventClose();
+
+      if (Platform.isWindows) {
+        _initTrayIcon();
+      }
     }
   }
+
+  bool get _isDesktop =>
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   void _initTrayEventHandler() {
     // 注册托盘事件处理器
@@ -100,8 +102,12 @@ class _AppRootState extends State<AppRoot> with WindowListener {
 
   @override
   void dispose() {
-    windowManager.removeListener(this);
-    _systemTray.destroy();
+    if (_isDesktop) {
+      windowManager.removeListener(this);
+      if (Platform.isWindows && _isTrayInitialized) {
+        _systemTray.destroy();
+      }
+    }
     super.dispose();
   }
 
@@ -209,14 +215,12 @@ class _AppRootState extends State<AppRoot> with WindowListener {
       await Future.delayed(const Duration(milliseconds: 500));
     }
     
-    // Remove tray listener and destroy tray
-    _systemTray.destroy();
-    
-    // Remove window listener
-    windowManager.removeListener(this);
-    
     // Only exit on desktop platforms
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    if (_isDesktop) {
+      if (Platform.isWindows && _isTrayInitialized) {
+        _systemTray.destroy();
+      }
+      windowManager.removeListener(this);
       // Destroy window
       await windowManager.destroy();
       // Exit app

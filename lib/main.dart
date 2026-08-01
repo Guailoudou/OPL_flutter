@@ -17,9 +17,11 @@ Mutex? _instanceMutex;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // 必须添加这一行
-  await windowManager.ensureInitialized();
+
+  final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+  if (isDesktop) {
+    await windowManager.ensureInitialized();
+  }
 
   // 检查单实例（仅 Windows）
   if (Platform.isWindows) {
@@ -31,18 +33,20 @@ void main() async {
     }
   }
 
-  WindowOptions windowOptions = const WindowOptions(
-    size: Size(1024, 650),
-    center: true,
-    backgroundColor: Colors.transparent,
-    skipTaskbar: false,
-    titleBarStyle: TitleBarStyle.normal,
-  );
-  
-  windowManager.waitUntilReadyToShow(windowOptions, () async {
-    await windowManager.show();
-    await windowManager.focus();
-  });
+  if (isDesktop) {
+    const windowOptions = WindowOptions(
+      size: Size(1024, 650),
+      center: true,
+      backgroundColor: Colors.transparent,
+      skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.normal,
+    );
+
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
   
   // 初始化日志器
   final logStore = LogStore();
@@ -56,14 +60,23 @@ void main() async {
           create: (_) => logStore,
           update: (_, controller, __) => controller.logs,
         ),
-        ChangeNotifierProxyProvider<AppController, UpdateService>(
-          create: (_) => throw Exception('UpdateService not initialized'),
-          update: (_, controller, __) => controller.updateService,
-        ),
       ],
-      child: const AppRoot(),
+      child: const _AppWithUpdateService(),
     ),
   );
+}
+
+class _AppWithUpdateService extends StatelessWidget {
+  const _AppWithUpdateService();
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.watch<AppController>();
+    return ChangeNotifierProvider<UpdateService>.value(
+      value: controller.updateService,
+      child: const AppRoot(),
+    );
+  }
 }
 
 /// 检查单实例
@@ -205,4 +218,3 @@ extension on String {
     return ptr.cast();
   }
 }
-

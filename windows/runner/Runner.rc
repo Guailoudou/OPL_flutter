@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "opl_config_manager" "\0"
+            VALUE "FileDescription", "OPL联机工具" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "opl_config_manager" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
             VALUE "OriginalFilename", "opl_config_manager.exe" "\0"
-            VALUE "ProductName", "opl_config_manager" "\0"
+            VALUE "ProductName", "OPL联机工具" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

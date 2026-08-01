@@ -18,10 +18,16 @@ class ConfigRoot {
   }
 
   factory ConfigRoot.fromJson(Map<String, dynamic> json) {
+    // OpenP2P writes the shared config using lower-case json tags
+    // (network/apps), while Flutter writes the legacy upper-case keys
+    // (Network/Apps). Read both forms so starting the Android core does not
+    // reset the Flutter configuration on the next launch.
+    final networkJson = (json['Network'] ?? json['network']) as Map?;
+    final appsValue = json['Apps'] ?? json['apps'];
     final network = NetworkConfig.fromJson(
-      (json['Network'] as Map?)?.cast<String, dynamic>() ?? const {},
+      networkJson?.cast<String, dynamic>() ?? const {},
     );
-    final appsJson = (json['Apps'] as List?) ?? const [];
+    final appsJson = (appsValue as List?) ?? const [];
     return ConfigRoot(
       network: network,
       apps: appsJson
@@ -99,12 +105,13 @@ class NetworkConfig {
     } else {
       tokenBigInt = d.token;
     }
-    
+
     return NetworkConfig(
       token: tokenBigInt,
       node: (json['Node'] as String?) ?? d.node,
       user: (json['User'] as String?) ?? d.user,
-      shareBandwidth: (json['ShareBandwidth'] as num?)?.toInt() ?? d.shareBandwidth,
+      shareBandwidth:
+          (json['ShareBandwidth'] as num?)?.toInt() ?? d.shareBandwidth,
       serverHost: (json['ServerHost'] as String?) ?? d.serverHost,
       serverPort: (json['ServerPort'] as num?)?.toInt() ?? d.serverPort,
       publicIPPort: (json['PublicIPPort'] as num?)?.toInt() ?? d.publicIPPort,
@@ -245,4 +252,3 @@ class AppTunnel {
 
   String get localLoopback => '127.0.0.1:$srcPort';
 }
-

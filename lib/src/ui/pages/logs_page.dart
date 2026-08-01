@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:archive/archive.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/platform_paths.dart';
 import '../../state/app_controller.dart';
@@ -55,6 +56,7 @@ class _LogsPageState extends State<LogsPage> {
   }
 
   Future<void> _exportLogs() async {
+    var loadingDialogVisible = false;
     try {
       // 显示加载对话框
       showDialog(
@@ -72,6 +74,7 @@ class _LogsPageState extends State<LogsPage> {
           ),
         ),
       );
+      loadingDialogVisible = true;
 
       // 获取OPL目录
       final oplDir = await PlatformPaths.configDir();
@@ -85,7 +88,10 @@ class _LogsPageState extends State<LogsPage> {
       // 创建压缩文件名
       final timestamp = DateTime.now().toString().replaceAll(RegExp(r'[\/:]'), '-');
       final zipFileName = 'opl_logs_$timestamp.zip';
-      final zipFile = File(p.join(execDir.path, zipFileName));
+      final outputDir = Platform.isAndroid
+          ? await Directory.systemTemp.createTemp('opl_logs_')
+          : execDir;
+      final zipFile = File(p.join(outputDir.path, zipFileName));
 
       // 创建压缩文件
       final archive = Archive();
@@ -104,6 +110,16 @@ class _LogsPageState extends State<LogsPage> {
 
       // 关闭加载对话框
       Navigator.of(context).pop();
+      loadingDialogVisible = false;
+
+      if (Platform.isAndroid) {
+        await Share.shareXFiles(
+          [XFile(zipFile.path, mimeType: 'application/zip')],
+          subject: 'OPL 日志文件',
+          text: 'OPL 应用日志导出',
+        );
+        return;
+      }
 
       // 显示成功对话框
       await showDialog(
@@ -129,7 +145,7 @@ class _LogsPageState extends State<LogsPage> {
       );
     } catch (e) {
       // 关闭加载对话框
-      if (mounted) {
+      if (mounted && loadingDialogVisible) {
         Navigator.of(context).pop();
       }
 
@@ -251,4 +267,3 @@ class _LogsPageState extends State<LogsPage> {
     );
   }
 }
-

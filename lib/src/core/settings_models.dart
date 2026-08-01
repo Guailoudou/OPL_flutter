@@ -1,3 +1,5 @@
+import 'url_config.dart';
+
 enum AppThemeMode { system, light, dark }
 
 class AppSettings {
@@ -36,7 +38,7 @@ class AppSettings {
       runInBackground: false,
       askBeforeMinimize: true,
       useGiteeMirror: false,
-      apiBase: 'http://localhost:3000',
+      apiBase: UrlConfig.defaultApiBase,
       autoStart: false,
       autoStartCore: false,
       ispWarning: true,
@@ -103,7 +105,7 @@ class AppSettings {
       runInBackground: json['runInBackground'] as bool? ?? false,
       askBeforeMinimize: json['askBeforeMinimize'] as bool? ?? true,
       useGiteeMirror: json['useGiteeMirror'] as bool? ?? false,
-      apiBase: json['apiBase'] as String? ?? 'http://localhost:3000',
+      apiBase: json['apiBase'] as String? ?? UrlConfig.defaultApiBase,
       autoStart: json['autoStart'] as bool? ?? false,
       autoStartCore: json['autoStartCore'] as bool? ?? false,
       ispWarning: json['ispWarning'] as bool? ?? true,
@@ -124,4 +126,3 @@ class AppSettings {
         'ispWarning': ispWarning,
       };
 }
-

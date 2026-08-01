@@ -4,7 +4,8 @@ class UrlConfig {
   UrlConfig._();
 
   // 后端 API 基础 URL
-  static String _apiBase = 'http://localhost:3000';
+  static const String defaultApiBase = 'http://192.168.3.194:3000';
+  static String _apiBase = defaultApiBase;
 
   static void setApiBase(String value) {
     _apiBase = value;

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -59,7 +61,7 @@ class _HomeShellState extends State<HomeShell> {
       );
     }
 
-    final pages = const [
+    final desktopPages = const [
       TunnelsPage(),
       NetworkPage(),
       DiagnosticPage(),
@@ -69,15 +71,27 @@ class _HomeShellState extends State<HomeShell> {
       MePage(),
     ];
 
+    // 移动端不提供网络诊断，必须同时从页面列表中移除，
+    // 否则底部导航的“日志”索引会错误地指向诊断页面。
+    final mobilePages = const [
+      TunnelsPage(),
+      LogsPage(),
+      NoticesPage(),
+      SettingsPage(),
+      MePage(),
+    ];
+
     final size = MediaQuery.sizeOf(context);
-    final useRail = size.width > size.height;
+    final useRail = !Platform.isAndroid && size.width > size.height;
+    final pages = useRail ? desktopPages : mobilePages;
+    final selectedIndex = index < pages.length ? index : 0;
 
     if (useRail) {
       return Scaffold(
         body: Row(
           children: [
             NavigationRail(
-              selectedIndex: index,
+              selectedIndex: selectedIndex,
               onDestinationSelected: (i) => setState(() => index = i),
               labelType: NavigationRailLabelType.all,
               destinations: const [
@@ -112,20 +126,19 @@ class _HomeShellState extends State<HomeShell> {
               ],
             ),
             const VerticalDivider(width: 1),
-            Expanded(child: pages[index]),
+            Expanded(child: pages[selectedIndex]),
           ],
         ),
       );
     }
 
     return Scaffold(
-      body: pages[index],
+      body: pages[selectedIndex],
       bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
+        selectedIndex: selectedIndex,
         onDestinationSelected: (i) => setState(() => index = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.tune), label: '隧道'),
-          NavigationDestination(icon: Icon(Icons.hub), label: '组网'),
           NavigationDestination(icon: Icon(Icons.receipt_long), label: '日志'),
           NavigationDestination(icon: Icon(Icons.notifications), label: '公告'),
           NavigationDestination(icon: Icon(Icons.settings), label: '设置'),
@@ -135,4 +148,3 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 }
-
