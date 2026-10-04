@@ -1,10 +1,14 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 
 import '../core/platform_paths.dart';
+import '../core/platform_support.dart';
+import '../core/config_store.dart';
 import '../utils/logger.dart';
+import 'ohos_share_service.dart';
 
 class LogExportService {
   Future<String?> exportLogs() async {
@@ -25,7 +29,7 @@ class LogExportService {
       final logFiles = await logDir.list().toList();
       for (final entity in logFiles) {
         if (entity is File && entity.path.endsWith('.log')) {
-          final content = await entity.readAsBytes();
+          final content = utf8.encode(_redact(await entity.readAsString()));
           final filename = p.basename(entity.path);
           archive.addFile(ArchiveFile(filename, content.length, content));
           L.d('Added log file: $filename', tag: 'log_export');
@@ -35,7 +39,12 @@ class LogExportService {
       // 添加配置文件
       final configFile = File(p.join(configDir.path, 'config.json'));
       if (await configFile.exists()) {
-        final content = await configFile.readAsBytes();
+        final config = ConfigStore.decode(await configFile.readAsString());
+        final content = utf8.encode(const JsonEncoder.withIndent('  ').convert(
+          config
+              .copyWith(network: config.network.copyWith(token: BigInt.zero))
+              .toJson(),
+        ));
         archive.addFile(ArchiveFile('config.json', content.length, content));
         L.d('Added config.json', tag: 'log_export');
       }
@@ -48,7 +57,8 @@ class LogExportService {
       }
 
       // 保存到临时目录
-      final tempDir = await Directory.systemTemp.createTemp('opl_logs_');
+      final tempDir =
+          await (await PlatformPaths.tempDir()).createTemp('opl_logs_');
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final zipPath = p.join(tempDir.path, 'opl_logs_$timestamp.zip');
       final zipFile = File(zipPath);
@@ -65,6 +75,13 @@ class LogExportService {
   Future<void> shareLogs(String zipPath) async {
     try {
       L.i('Sharing logs: $zipPath', tag: 'log_export');
+      if (PlatformSupport.isOhos) {
+        final shared = await OhosShareService.shareFile(zipPath);
+        if (!shared) {
+          throw StateError('OHOS system sharing failed');
+        }
+        return;
+      }
       await Share.shareXFiles(
         [XFile(zipPath)],
         subject: 'OPL 日志文件',
@@ -78,12 +95,13 @@ class LogExportService {
 
   Future<void> cleanupOldExports() async {
     try {
-      final tempDir = Directory.systemTemp;
+      final tempDir = await PlatformPaths.tempDir();
       final now = DateTime.now();
       final cutoff = now.subtract(const Duration(days: 7));
 
       await for (final entity in tempDir.list()) {
-        if (entity is Directory && entity.path.contains('opl_logs_')) {
+        if (entity is Directory &&
+            p.basename(entity.path).startsWith('opl_logs_')) {
           final stat = await entity.stat();
           if (stat.modified.isBefore(cutoff)) {
             await entity.delete(recursive: true);
@@ -95,4 +113,9 @@ class LogExportService {
       L.e('Failed to cleanup old exports', tag: 'log_export', error: e);
     }
   }
+
+  String _redact(String text) => text.replaceAllMapped(
+        RegExp(r'(token\s*[=:]\s*)\d+', caseSensitive: false),
+        (match) => '${match.group(1)}[redacted]',
+      );
 }

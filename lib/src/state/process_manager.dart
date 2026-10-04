@@ -1,3 +1,4 @@
+import '../core/platform_support.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -111,7 +112,8 @@ class ProcessManager {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((line) {
-      _outputController.add(ProcessOutput(line: '[stderr] $line', isError: true));
+      _outputController
+          .add(ProcessOutput(line: '[stderr] $line', isError: true));
     });
 
     unawaited(_process!.exitCode.then((code) {
@@ -163,7 +165,8 @@ class ProcessManager {
     } else if (line.contains('peer offline')) {
       L.w('Peer is offline', tag: 'process_manager');
     } else if (line.contains('NAT type:2')) {
-      L.w('Symmetric NAT detected, may affect connection', tag: 'process_manager');
+      L.w('Symmetric NAT detected, may affect connection',
+          tag: 'process_manager');
     } else if (line.contains('login ok')) {
       L.i('Login successful', tag: 'process_manager');
     }
@@ -190,7 +193,7 @@ class ProcessManager {
     L.i('Stopping process: PID $pid', tag: 'process_manager');
 
     try {
-      if (Platform.isWindows) {
+      if (PlatformSupport.isWindows) {
         final result = await Process.run(
           'taskkill',
           ['/F', '/T', '/PID', pid.toString()],
@@ -205,7 +208,8 @@ class ProcessManager {
           ['/FI', 'PID eq $pid'],
           runInShell: true,
         );
-        final stillRunning = checkResult.stdout.toString().contains(pid.toString());
+        final stillRunning =
+            checkResult.stdout.toString().contains(pid.toString());
         if (stillRunning) {
           L.w('Process still running, trying fallback', tag: 'process_manager');
           await Process.run(
@@ -223,7 +227,7 @@ class ProcessManager {
       }
     } catch (e) {
       L.e('Failed to stop process', tag: 'process_manager', error: e);
-      if (Platform.isWindows) {
+      if (PlatformSupport.isWindows) {
         try {
           await Process.run(
             'taskkill',

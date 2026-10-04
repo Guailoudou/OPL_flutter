@@ -1,6 +1,4 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-
+import 'remote_json.dart';
 import 'url_config.dart';
 
 class Notice {
@@ -42,14 +40,7 @@ class NoticeResponse {
 class NoticeService {
   Future<NoticeResponse?> fetchNotices() async {
     try {
-      final resp = await http.get(Uri.parse(UrlConfig.noticesApiUrl));
-      if (resp.statusCode != 200) {
-        return null;
-      }
-      final decoded = jsonDecode(resp.body);
-      if (decoded is! Map<String, dynamic>) {
-        return null;
-      }
+      final decoded = await fetchJsonDocument(UrlConfig.noticesJsonUrl);
       return NoticeResponse.fromJson(decoded);
     } catch (e) {
       return null;

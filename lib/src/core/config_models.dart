@@ -34,7 +34,7 @@ class ConfigRoot {
           .whereType<Map>()
           .map((e) => AppTunnel.fromJson(e.cast<String, dynamic>()))
           .toList(),
-      logLevel: (json['LogLevel'] as num?)?.toInt() ?? 1,
+      logLevel: ((json['LogLevel'] ?? json['logLevel']) as num?)?.toInt() ?? 1,
     );
   }
 
@@ -90,31 +90,42 @@ class NetworkConfig {
 
   factory NetworkConfig.fromJson(Map<String, dynamic> json) {
     final d = NetworkConfig.defaults();
-    final tokenValue = json['Token'];
+    final tokenValue = json['Token'] ?? json['token'];
     BigInt tokenBigInt;
     if (tokenValue is int) {
       tokenBigInt = BigInt.from(tokenValue);
     } else if (tokenValue is num) {
-      tokenBigInt = BigInt.from(tokenValue.toInt());
+      throw const FormatException('Token must be an unsigned 64-bit integer');
     } else if (tokenValue is String) {
-      try {
-        tokenBigInt = BigInt.parse(tokenValue);
-      } catch (_) {
-        tokenBigInt = d.token;
+      if (!RegExp(r'^\d+$').hasMatch(tokenValue)) {
+        throw const FormatException('Token must contain decimal digits');
       }
+      tokenBigInt = BigInt.parse(tokenValue);
+    } else if (tokenValue != null) {
+      throw const FormatException('Invalid token');
     } else {
       tokenBigInt = d.token;
+    }
+    if (tokenBigInt < BigInt.zero || tokenBigInt >= (BigInt.one << 64)) {
+      throw const FormatException('Token is outside the unsigned 64-bit range');
     }
 
     return NetworkConfig(
       token: tokenBigInt,
-      node: (json['Node'] as String?) ?? d.node,
-      user: (json['User'] as String?) ?? d.user,
+      node: ((json['Node'] ?? json['node']) as String?) ?? d.node,
+      user: ((json['User'] ?? json['user']) as String?) ?? d.user,
       shareBandwidth:
-          (json['ShareBandwidth'] as num?)?.toInt() ?? d.shareBandwidth,
-      serverHost: (json['ServerHost'] as String?) ?? d.serverHost,
-      serverPort: (json['ServerPort'] as num?)?.toInt() ?? d.serverPort,
-      publicIPPort: (json['PublicIPPort'] as num?)?.toInt() ?? d.publicIPPort,
+          ((json['ShareBandwidth'] ?? json['shareBandwidth']) as num?)
+                  ?.toInt() ??
+              d.shareBandwidth,
+      serverHost: ((json['ServerHost'] ?? json['serverHost']) as String?) ??
+          d.serverHost,
+      serverPort:
+          ((json['ServerPort'] ?? json['serverPort']) as num?)?.toInt() ??
+              d.serverPort,
+      publicIPPort:
+          ((json['PublicIPPort'] ?? json['publicIPPort']) as num?)?.toInt() ??
+              d.publicIPPort,
     );
   }
 
@@ -186,19 +197,24 @@ class AppTunnel {
 
   factory AppTunnel.fromJson(Map<String, dynamic> json) {
     return AppTunnel(
-      appName: (json['AppName'] as String?) ?? '',
-      protocol: (json['Protocol'] as String?) ?? 'tcp',
-      underlayProtocol: (json['UnderlayProtocol'] as String?) ?? '',
-      punchPriority: (json['PunchPriority'] as num?)?.toInt() ?? 0,
-      whitelist: (json['Whitelist'] as String?) ?? '',
-      srcPort: (json['SrcPort'] as num?)?.toInt() ?? 0,
-      peerNode: (json['PeerNode'] as String?) ?? '',
-      dstPort: (json['DstPort'] as num?)?.toInt() ?? 0,
-      dstHost: (json['DstHost'] as String?) ?? 'localhost',
-      peerUser: (json['PeerUser'] as String?) ?? '',
-      relayNode: (json['RelayNode'] as String?) ?? '',
-      forceRelay: (json['ForceRelay'] as num?)?.toInt() ?? 0,
-      enabled: (json['Enabled'] as num?)?.toInt() ?? 0,
+      appName: ((json['AppName'] ?? json['appName']) as String?) ?? '',
+      protocol: ((json['Protocol'] ?? json['protocol']) as String?) ?? 'tcp',
+      underlayProtocol:
+          ((json['UnderlayProtocol'] ?? json['underlayProtocol']) as String?) ??
+              '',
+      punchPriority:
+          ((json['PunchPriority'] ?? json['punchPriority']) as num?)?.toInt() ??
+              0,
+      whitelist: ((json['Whitelist'] ?? json['whitelist']) as String?) ?? '',
+      srcPort: ((json['SrcPort'] ?? json['srcPort']) as num?)?.toInt() ?? 0,
+      peerNode: ((json['PeerNode'] ?? json['peerNode']) as String?) ?? '',
+      dstPort: ((json['DstPort'] ?? json['dstPort']) as num?)?.toInt() ?? 0,
+      dstHost: ((json['DstHost'] ?? json['dstHost']) as String?) ?? 'localhost',
+      peerUser: ((json['PeerUser'] ?? json['peerUser']) as String?) ?? '',
+      relayNode: ((json['RelayNode'] ?? json['relayNode']) as String?) ?? '',
+      forceRelay:
+          ((json['ForceRelay'] ?? json['forceRelay']) as num?)?.toInt() ?? 0,
+      enabled: ((json['Enabled'] ?? json['enabled']) as num?)?.toInt() ?? 0,
     );
   }
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../state/log_store.dart';
 
 class L {
@@ -19,7 +20,8 @@ class L {
     _log('W', tag, message);
   }
 
-  static void e(String message, {String tag = 'APP', dynamic error, StackTrace? stackTrace}) {
+  static void e(String message,
+      {String tag = 'APP', dynamic error, StackTrace? stackTrace}) {
     final logMessage = error != null ? '$message\nError: $error' : message;
     _log('E', tag, logMessage);
     if (stackTrace != null) {
@@ -44,7 +46,7 @@ class L {
     if (logStore != null) {
       logStore.add(logMessage);
     } else {
-      print(logMessage);
+      debugPrint(logMessage);
     }
   }
 }

@@ -1,17 +1,19 @@
+import 'package:path/path.dart' as p;
+import '../core/platform_support.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../utils/logger.dart';
 
 class AutoStartService {
   static const String _appName = 'OPL';
-  
+
   /// 检查是否已设置开机自启动
   Future<bool> isEnabled() async {
-    if (!kIsWeb && Platform.isWindows) {
+    if (!kIsWeb && PlatformSupport.isWindows) {
       return await _checkWindowsRegistry();
-    } else if (!kIsWeb && Platform.isLinux) {
+    } else if (!kIsWeb && PlatformSupport.isLinux) {
       return await _checkLinuxAutostart();
-    } else if (!kIsWeb && Platform.isMacOS) {
+    } else if (!kIsWeb && PlatformSupport.isMacOS) {
       return await _checkMacOSLoginItem();
     }
     return false;
@@ -20,11 +22,11 @@ class AutoStartService {
   /// 启用开机自启动
   Future<void> enable() async {
     try {
-      if (!kIsWeb && Platform.isWindows) {
+      if (!kIsWeb && PlatformSupport.isWindows) {
         await _enableWindowsRegistry();
-      } else if (!kIsWeb && Platform.isLinux) {
+      } else if (!kIsWeb && PlatformSupport.isLinux) {
         await _enableLinuxAutostart();
-      } else if (!kIsWeb && Platform.isMacOS) {
+      } else if (!kIsWeb && PlatformSupport.isMacOS) {
         await _enableMacOSLoginItem();
       }
       L.i('开机自启动已启用', tag: 'AutoStart');
@@ -37,11 +39,11 @@ class AutoStartService {
   /// 禁用开机自启动
   Future<void> disable() async {
     try {
-      if (!kIsWeb && Platform.isWindows) {
+      if (!kIsWeb && PlatformSupport.isWindows) {
         await _disableWindowsRegistry();
-      } else if (!kIsWeb && Platform.isLinux) {
+      } else if (!kIsWeb && PlatformSupport.isLinux) {
         await _disableLinuxAutostart();
-      } else if (!kIsWeb && Platform.isMacOS) {
+      } else if (!kIsWeb && PlatformSupport.isMacOS) {
         await _disableMacOSLoginItem();
       }
       L.i('开机自启动已禁用', tag: 'AutoStart');
@@ -54,9 +56,14 @@ class AutoStartService {
   /// Windows: 检查注册表
   Future<bool> _checkWindowsRegistry() async {
     try {
-      final result = await Process.run(
+      final result = await _checkedRun(
         'reg',
-        ['query', r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run', '/v', _appName],
+        [
+          'query',
+          r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run',
+          '/v',
+          _appName
+        ],
       );
       return result.exitCode == 0;
     } catch (e) {
@@ -68,17 +75,31 @@ class AutoStartService {
   /// Windows: 启用注册表
   Future<void> _enableWindowsRegistry() async {
     final exePath = Platform.resolvedExecutable;
-    await Process.run(
+    await _checkedRun(
       'reg',
-      ['add', r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run', '/v', _appName, '/d', exePath, '/f'],
+      [
+        'add',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run',
+        '/v',
+        _appName,
+        '/d',
+        '"$exePath"',
+        '/f'
+      ],
     );
   }
 
   /// Windows: 禁用注册表
   Future<void> _disableWindowsRegistry() async {
-    await Process.run(
+    await _checkedRun(
       'reg',
-      ['delete', r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run', '/v', _appName, '/f'],
+      [
+        'delete',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run',
+        '/v',
+        _appName,
+        '/f'
+      ],
     );
   }
 
@@ -107,7 +128,7 @@ class AutoStartService {
     final content = '''[Desktop Entry]
 Type=Application
 Name=$_appName
-Exec=$exePath
+Exec="$exePath"
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
@@ -127,9 +148,12 @@ X-GNOME-Autostart-enabled=true
   /// macOS: 检查 Login Item
   Future<bool> _checkMacOSLoginItem() async {
     try {
-      final result = await Process.run(
+      final result = await _checkedRun(
         'osascript',
-        ['-e', 'tell application "System Events" to get the name of every login item'],
+        [
+          '-e',
+          'tell application "System Events" to get the name of every login item'
+        ],
       );
       return result.stdout.toString().contains(_appName);
     } catch (e) {
@@ -140,18 +164,37 @@ X-GNOME-Autostart-enabled=true
 
   /// macOS: 启用 Login Item
   Future<void> _enableMacOSLoginItem() async {
-    final exePath = Platform.resolvedExecutable;
-    await Process.run(
+    final executable = Platform.resolvedExecutable;
+    final exePath = p.dirname(p.dirname(p.dirname(executable)));
+    if (!exePath.endsWith('.app')) {
+      throw StateError('Start the installed .app first');
+    }
+    await _checkedRun(
       'osascript',
-      ['-e', 'tell application "System Events" to make login item at end with properties {path:"$exePath", hidden:false}'],
+      [
+        '-e',
+        'tell application "System Events" to make login item at end with properties {name:"$_appName", path:"$exePath", hidden:false}'
+      ],
     );
   }
 
   /// macOS: 禁用 Login Item
   Future<void> _disableMacOSLoginItem() async {
-    await Process.run(
+    await _checkedRun(
       'osascript',
-      ['-e', 'tell application "System Events" to delete login item "$_appName"'],
+      [
+        '-e',
+        'tell application "System Events" to delete login item "$_appName"'
+      ],
     );
+  }
+
+  Future<ProcessResult> _checkedRun(
+      String command, List<String> arguments) async {
+    final result = await Process.run(command, arguments);
+    if (result.exitCode != 0) {
+      throw StateError('$command failed: ${result.stderr}');
+    }
+    return result;
   }
 }

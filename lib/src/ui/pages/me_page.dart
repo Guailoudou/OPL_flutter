@@ -1,8 +1,11 @@
+import '../../services/update_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../services/external_link_service.dart';
 
+import '../../core/platform_support.dart';
 import '../../core/sponsor_models.dart';
 import '../../core/sponsor_service.dart';
 import '../../state/app_controller.dart';
@@ -29,14 +32,17 @@ class MePage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('UID（Network.Node）', style: Theme.of(context).textTheme.labelLarge),
+                  Text('UID（Network.Node）',
+                      style: Theme.of(context).textTheme.labelLarge),
                   const SizedBox(height: 6),
-                  SelectableText(cfg.network.node, style: Theme.of(context).textTheme.titleMedium),
+                  SelectableText(cfg.network.node,
+                      style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
-                        child: Text('共享带宽（ShareBandwidth）：${cfg.network.shareBandwidth}'),
+                        child: Text(
+                            '共享带宽（ShareBandwidth）：${cfg.network.shareBandwidth}'),
                       ),
                       FilledButton.tonal(
                         onPressed: () async {
@@ -71,14 +77,17 @@ class MePage extends StatelessWidget {
                               context: context,
                               builder: (_) => AlertDialog(
                                 title: const Text('重置 UID'),
-                                content: const Text('此操作会生成新的 UID，可能导致现有连接失效。确认继续？'),
+                                content:
+                                    const Text('此操作会生成新的 UID，可能导致现有连接失效。确认继续？'),
                                 actions: [
                                   TextButton(
-                                    onPressed: () => Navigator.pop(context, false),
+                                    onPressed: () =>
+                                        Navigator.pop(context, false),
                                     child: const Text('取消'),
                                   ),
                                   FilledButton(
-                                    onPressed: () => Navigator.pop(context, true),
+                                    onPressed: () =>
+                                        Navigator.pop(context, true),
                                     child: const Text('确认重置'),
                                   ),
                                 ],
@@ -103,20 +112,23 @@ class MePage extends StatelessWidget {
                               context: context,
                               builder: (_) => AlertDialog(
                                 title: const Text('重置程序'),
-                                content: const Text('此操作会删除 OPL 目录中的核心文件和配置文件，并重启应用。确认继续？'),
+                                content: const Text(
+                                    '此操作会停止核心、删除已下载的核心并重置配置与设置。确认继续？'),
                                 actions: [
                                   TextButton(
-                                    onPressed: () => Navigator.pop(context, false),
+                                    onPressed: () =>
+                                        Navigator.pop(context, false),
                                     child: const Text('取消'),
                                   ),
                                   FilledButton(
-                                    onPressed: () => Navigator.pop(context, true),
+                                    onPressed: () =>
+                                        Navigator.pop(context, true),
                                     child: const Text('确认重置'),
                                   ),
                                 ],
                               ),
                             );
-                            if (ok == true) {
+                            if (ok == true && context.mounted) {
                               await controller.resetApp(context);
                             }
                           },
@@ -138,7 +150,8 @@ class MePage extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const SponsorListPage()),
+                  MaterialPageRoute(
+                      builder: (context) => const SponsorListPage()),
                 );
               },
             ),
@@ -150,7 +163,21 @@ class MePage extends StatelessWidget {
               title: const Text('关于'),
               subtitle: const Text('版本信息 / 作者 / Bug 反馈'),
               onTap: () async {
-                final info = await PackageInfo.fromPlatform();
+                PackageInfo info = PackageInfo(
+                  appName: 'OPL',
+                  packageName: 'top.gldhn.opl_ohos',
+                  version: controller.updateService
+                          .getInstalledVersion(UpdateComponent.app) ??
+                      '0.1.0',
+                  buildNumber: '1',
+                );
+                try {
+                  if (!PlatformSupport.isOhos) {
+                    info = await PackageInfo.fromPlatform();
+                  }
+                } on MissingPluginException {
+                  // package_info_plus has no OHOS implementation yet.
+                }
                 if (!context.mounted) return;
                 showDialog(
                   context: context,
@@ -167,10 +194,9 @@ class MePage extends StatelessWidget {
                         const SizedBox(height: 10),
                         InkWell(
                           onTap: () async {
-                            final url = Uri.parse('https://space.bilibili.com/496960407');
-                            if (await canLaunchUrl(url)) {
-                              await launchUrl(url, mode: LaunchMode.externalApplication);
-                            }
+                            final url = Uri.parse(
+                                'https://space.bilibili.com/496960407');
+                            await openExternalLink(url);
                           },
                           child: const Text(
                             '作者 B 站：https://space.bilibili.com/496960407',
@@ -183,10 +209,9 @@ class MePage extends StatelessWidget {
                         const SizedBox(height: 10),
                         InkWell(
                           onTap: () async {
-                            final url = Uri.parse('https://github.com/your-repo/issues');
-                            if (await canLaunchUrl(url)) {
-                              await launchUrl(url, mode: LaunchMode.externalApplication);
-                            }
+                            final url = Uri.parse(
+                                'https://github.com/Guailoudou/OPL_flutter/issues');
+                            await openExternalLink(url);
                           },
                           child: const Text(
                             'Bug 反馈：点击打开 Issue 页面',
@@ -433,4 +458,3 @@ class _SponsorListPageState extends State<SponsorListPage> {
     );
   }
 }
-

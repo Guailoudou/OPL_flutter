@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/easytier_service.dart';
@@ -136,7 +135,8 @@ class _NetworkPageState extends State<NetworkPage> {
   }
 
   Future<void> _showCreateEasyTierDialog(String uid) async {
-    final nodeServerController = TextEditingController(text: 'tcp://p.gldhn.top:11010');
+    final nodeServerController =
+        TextEditingController(text: 'tcp://p.gldhn.top:11010');
 
     final result = await showDialog<String>(
       context: context,
@@ -185,7 +185,8 @@ class _NetworkPageState extends State<NetworkPage> {
   }
 
   Future<void> _showJoinEasyTierDialog(String uid) async {
-    final nodeServerController = TextEditingController(text: 'tcp://p.gldhn.top:11010');
+    final nodeServerController =
+        TextEditingController(text: 'tcp://p.gldhn.top:11010');
     final networkNameController = TextEditingController();
 
     final result = await showDialog<Map<String, String>>(

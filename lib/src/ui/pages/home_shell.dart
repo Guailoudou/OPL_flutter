@@ -1,6 +1,5 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
+import '../../core/platform_support.dart';
 import 'package:provider/provider.dart';
 
 import '../../state/app_controller.dart';
@@ -82,7 +81,7 @@ class _HomeShellState extends State<HomeShell> {
     ];
 
     final size = MediaQuery.sizeOf(context);
-    final useRail = !Platform.isAndroid && size.width > size.height;
+    final useRail = PlatformSupport.isDesktop && size.width >= 850;
     final pages = useRail ? desktopPages : mobilePages;
     final selectedIndex = index < pages.length ? index : 0;
 

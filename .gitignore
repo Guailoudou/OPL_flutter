@@ -48,3 +48,16 @@ app.*.map.json
 node_modules
 .env
 openp2p-master
+.go-build-cache/
+.go-mod-cache/
+tmp_openp2p_*.so
+tmp_openp2p_*.h
+tmp_openp2p_linux_arm64
+.codex_tmp
+.codex_staging
+/dist/
+.flutter-plugins
+**/.hvigor/
+**/oh_modules/
+**/local.properties
+/ohos/build-profile.json5

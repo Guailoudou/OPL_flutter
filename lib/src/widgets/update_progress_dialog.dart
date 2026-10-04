@@ -13,7 +13,8 @@ class UpdateProgressDialog extends StatefulWidget {
   static Future<void> show({
     required BuildContext context,
     required String title,
-    required Future<void> Function(void Function(double) onProgress) downloadTask,
+    required Future<void> Function(void Function(double) onProgress)
+        downloadTask,
   }) async {
     await showDialog<void>(
       context: context,
@@ -91,10 +92,11 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ] else if (_completed) ...[
-            const Icon(Icons.check_circle_outline, color: Colors.green, size: 48),
+            const Icon(Icons.check_circle_outline,
+                color: Colors.green, size: 48),
             const SizedBox(height: 16),
             Text(
-              '安装完成',
+              '处理完成',
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ] else ...[
@@ -127,7 +129,7 @@ class _UpdateProgressDialogState extends State<UpdateProgressDialog> {
         else if (!_completed)
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+            child: const Text('后台继续'),
           ),
       ],
     );

@@ -5,6 +5,7 @@
  *
  * 用法:
  *   node release.js app <version> <changelog>   — 构建并发布 App
+ *   node release.js android <version> <changelog> — 构建并发布 Android APK
  *   node release.js core <version>              — 发布 Core（需先放置构建产物）
  *   node release.js easytier <version>          — 发布 EasyTier（需先放置构建产物）
  *   node release.js all <version>               — 发布全部组件
@@ -79,6 +80,7 @@ const PLATFORM_FILES = {
     win32: { ext: '.exe', remoteName: (v) => `opl-${v}.exe` },
     linux: { ext: '', remoteName: (v) => `opl-${v}.tar.gz` },
     darwin: { ext: '.dmg', remoteName: (v) => `opl-${v}.dmg` },
+    android: { ext: '.apk', remoteName: (v) => `opl-${v}.apk` },
   },
 };
 
@@ -218,6 +220,40 @@ async function releaseApp(version, changelog) {
   log(`App v${version} 发布完成!`);
 }
 
+async function releaseAndroidApp(version, changelog) {
+  log(`开始发布 Android App v${version}...`);
+
+  const pubspecPath = path.join(ROOT, 'pubspec.yaml');
+  let pubspec = fs.readFileSync(pubspecPath, 'utf-8');
+  const releases = readReleases();
+  const buildNumber = (releases.app.buildNumber || 0) + 1;
+  pubspec = pubspec.replace(/^version:.*$/m, `version: ${version}+${buildNumber}`);
+  fs.writeFileSync(pubspecPath, pubspec);
+
+  run(`${CONFIG.flutter} build apk --release`, ROOT);
+
+  ensureDir(STAGING_DIR);
+  const sourceApk = path.join(BUILD_DIR, 'app', 'outputs', 'flutter-apk', 'app-release.apk');
+  if (!fs.existsSync(sourceApk)) {
+    throw new Error(`未找到 Android 构建产物: ${sourceApk}`);
+  }
+
+  const remoteName = PLATFORM_FILES.app.android.remoteName(version);
+  const stagedApk = path.join(STAGING_DIR, remoteName);
+  fs.copyFileSync(sourceApk, stagedApk);
+  const hash = await sha256(stagedApk);
+  logOk(`Android SHA256: ${hash}`);
+  await uploadFile(stagedApk, remoteName);
+
+  releases.app.version = version;
+  releases.app.buildNumber = buildNumber;
+  releases.app.changelog = changelog || releases.app.changelog;
+  releases.app.url.android = `${CONFIG.releasesUrl}/${remoteName}`;
+  releases.app.hash.android = hash;
+  writeReleases(releases);
+  logOk(`releases.json 已更新 (Android App v${version})`);
+}
+
 // ─── Core 发布 ───────────────────────────────────────────────────────────────
 
 async function releaseCore(version) {
@@ -311,6 +347,7 @@ async function main() {
 
 用法:
   node release.js app <version> [changelog]   构建并发布 App
+  node release.js android <version> [changelog] 构建并发布 Android APK
   node release.js core <version>              发布 Core (需先放置构建产物)
   node release.js easytier <version>          发布 EasyTier (需先放置构建产物)
   node release.js all <version>               发布全部组件
@@ -341,6 +378,9 @@ async function main() {
     switch (component) {
       case 'app':
         await releaseApp(version, rest.join(' '));
+        break;
+      case 'android':
+        await releaseAndroidApp(version, rest.join(' '));
         break;
       case 'core':
         await releaseCore(version);

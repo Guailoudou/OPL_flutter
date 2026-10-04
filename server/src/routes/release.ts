@@ -10,11 +10,13 @@ interface ReleaseData {
       windows: string;
       linux: string;
       macos: string;
+      android: string;
     };
     hash: {
       windows: string;
       linux: string;
       macos: string;
+      android: string;
     };
   };
   core: {

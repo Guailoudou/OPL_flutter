@@ -32,6 +32,7 @@
     <el-container>
       <el-header class="app-header">
         <span>OPL 后端管理系统</span>
+        <el-button class="auth-button" @click="configureToken">设置管理密钥</el-button>
       </el-header>
       <el-main class="app-main">
         <router-view />
@@ -43,9 +44,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
 const activeMenu = computed(() => route.path)
+
+async function configureToken() {
+  try {
+    const { value } = await ElMessageBox.prompt('请输入服务器配置的管理密钥，仅在当前标签页保存。', '管理密钥', {
+      inputType: 'password', inputValidator: value => !!value?.trim() || '请输入管理密钥',
+      confirmButtonText: '保存', cancelButtonText: '取消'
+    })
+    sessionStorage.setItem('opl.adminToken', value.trim())
+    ElMessage.success('管理密钥已保存')
+  } catch { /* Cancel leaves the current credential unchanged. */ }
+}
 </script>
 
 <style>
@@ -106,4 +119,6 @@ body {
   background: #f0f2f5;
   padding: 20px;
 }
+
+.auth-button { margin-left: auto; }
 </style>

@@ -35,21 +35,22 @@ class _NoticesPageState extends State<NoticesPage> {
 
     final settingsStore = controller.settingsStore;
     final settings = controller.settings;
-    
+
     // 获取最新公告（已排序）
     final latestNotice = controller.cachedNotices.first;
     final lastTime = settings.lastNoticeTime;
-    
+
     L.d('checking latest notice: ${latestNotice.time}', tag: 'notices');
     L.d('last stored time: $lastTime', tag: 'notices');
-    
+
     // 比较最新公告时间和存储的时间
     bool hasNew = false;
     if (lastTime == null || lastTime.isEmpty) {
       hasNew = true;
     } else {
       try {
-        final latestTime = DateTime.parse(latestNotice.time.replaceAll(' ', 'T'));
+        final latestTime =
+            DateTime.parse(latestNotice.time.replaceAll(' ', 'T'));
         final storedTime = DateTime.parse(lastTime.replaceAll(' ', 'T'));
         hasNew = latestTime.isAfter(storedTime);
       } catch (_) {
@@ -57,13 +58,14 @@ class _NoticesPageState extends State<NoticesPage> {
         hasNew = latestNotice.time.compareTo(lastTime) > 0;
       }
     }
-    
+
     if (hasNew) {
       L.i('showing new notice dialog', tag: 'notices');
       _showNoticeDialog(latestNotice);
-      
+
       // 更新存储的时间为最新公告的时间
-      final updatedSettings = settings.copyWith(lastNoticeTime: latestNotice.time);
+      final updatedSettings =
+          settings.copyWith(lastNoticeTime: latestNotice.time);
       controller.settings = updatedSettings;
       await settingsStore.save(updatedSettings);
       L.d('saved lastNoticeTime: ${latestNotice.time}', tag: 'notices');
@@ -113,7 +115,7 @@ class _NoticesPageState extends State<NoticesPage> {
       builder: (context, controller, _) {
         final notices = controller.cachedNotices;
         final isLoading = !controller.noticesLoaded;
-        
+
         return Scaffold(
           appBar: AppBar(
             title: const Text('公告'),
@@ -142,7 +144,8 @@ class _NoticesPageState extends State<NoticesPage> {
                               children: [
                                 Text(
                                   notice.title,
-                                  style: Theme.of(context).textTheme.titleMedium,
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium,
                                 ),
                                 const SizedBox(height: 8),
                                 Text(

@@ -1,12 +1,11 @@
+import '../core/platform_support.dart';
 import 'dart:io';
 
 import '../utils/logger.dart';
 
 class WindowsDefenderService {
-  static const String _appName = 'OPL';
-
   Future<bool> isExcluded() async {
-    if (!Platform.isWindows) {
+    if (!PlatformSupport.isWindows) {
       return false;
     }
 
@@ -24,14 +23,16 @@ class WindowsDefenderService {
       final output = result.stdout.toString().trim();
       return output.isNotEmpty;
     } catch (e) {
-      L.e('failed to check Windows Defender exclusion', tag: 'defender', error: e);
+      L.e('failed to check Windows Defender exclusion',
+          tag: 'defender', error: e);
       return false;
     }
   }
 
   Future<void> addExclusion() async {
-    if (!Platform.isWindows) {
-      throw UnsupportedError('Windows Defender exclusion is only supported on Windows');
+    if (!PlatformSupport.isWindows) {
+      throw UnsupportedError(
+          'Windows Defender exclusion is only supported on Windows');
     }
 
     try {
@@ -49,20 +50,23 @@ class WindowsDefenderService {
 
       if (result.exitCode != 0) {
         final error = result.stderr.toString();
-        L.e('failed to add Windows Defender exclusion: $error', tag: 'defender');
+        L.e('failed to add Windows Defender exclusion: $error',
+            tag: 'defender');
         throw Exception('添加排除项失败: $error');
       }
 
       L.i('Windows Defender exclusion added successfully', tag: 'defender');
     } catch (e) {
-      L.e('failed to add Windows Defender exclusion', tag: 'defender', error: e);
+      L.e('failed to add Windows Defender exclusion',
+          tag: 'defender', error: e);
       rethrow;
     }
   }
 
   Future<void> removeExclusion() async {
-    if (!Platform.isWindows) {
-      throw UnsupportedError('Windows Defender exclusion is only supported on Windows');
+    if (!PlatformSupport.isWindows) {
+      throw UnsupportedError(
+          'Windows Defender exclusion is only supported on Windows');
     }
 
     try {
@@ -80,19 +84,21 @@ class WindowsDefenderService {
 
       if (result.exitCode != 0) {
         final error = result.stderr.toString();
-        L.e('failed to remove Windows Defender exclusion: $error', tag: 'defender');
+        L.e('failed to remove Windows Defender exclusion: $error',
+            tag: 'defender');
         throw Exception('移除排除项失败: $error');
       }
 
       L.i('Windows Defender exclusion removed successfully', tag: 'defender');
     } catch (e) {
-      L.e('failed to remove Windows Defender exclusion', tag: 'defender', error: e);
+      L.e('failed to remove Windows Defender exclusion',
+          tag: 'defender', error: e);
       rethrow;
     }
   }
 
   Future<bool> hasAdminPrivileges() async {
-    if (!Platform.isWindows) {
+    if (!PlatformSupport.isWindows) {
       return false;
     }
 

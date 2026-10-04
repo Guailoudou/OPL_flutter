@@ -50,6 +50,15 @@ node server/scripts/release.js app 0.2.0 "新增XX功能\n修复XX问题"
 5. 通过 SFTP 上传到服务器
 6. 更新 `releases.json`
 
+### Android App 发布
+
+```bash
+node server/scripts/release.js android 0.2.0 "新增XX功能\n修复XX问题"
+```
+
+脚本会构建 `app-release.apk`、计算 SHA256、上传 APK，并更新
+`releases.json` 中的 `app.url.android` 与 `app.hash.android`。
+
 ### Core 发布（手动放置产物）
 
 Core 需要从 OpenP2P 官方获取构建产物：
@@ -118,13 +127,14 @@ node server/scripts/release.js all 0.2.0 "更新日志"
 
 发布完成后，客户端通过 `UpdateService` 自动完成更新：
 
-1. **检查更新**：请求 `releases.json` 获取最新版本信息
+1. **检查更新**：请求 `<基础地址>/data/releases.json` 获取最新版本信息
 2. **版本比较**：使用 `SemVer` 比较本地版本和远程版本
 3. **流式下载**：下载文件并实时显示进度
 4. **校验文件**：验证 SHA256（跳过 `placeholder_hash`）
 5. **解压安装**：
    - **Core**：解压 tar.gz → 找到可执行文件 → 重命名到 config 目录 → chmod +x
    - **EasyTier**：解压 zip → 释放到 config 目录 → chmod +x → 调用 `--version` 获取实际版本号
+   - **Android App**：下载并校验 APK → 请求未知来源安装权限 → 打开系统安装界面
 
 ## 目录结构
 

@@ -148,9 +148,8 @@ class NetworkDiagnosticService {
           final isPrivate = _isPrivateIp(ip);
 
           natType = isPrivate ? 'NAT 后' : '公网';
-          description = isPrivate
-              ? '检测到私有 IP ($ip)，可能位于 NAT 后'
-              : '检测到公网 IP ($ip)';
+          description =
+              isPrivate ? '检测到私有 IP ($ip)，可能位于 NAT 后' : '检测到公网 IP ($ip)';
         }
       }
 

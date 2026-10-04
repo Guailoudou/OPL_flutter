@@ -95,7 +95,8 @@ class _PresetPageState extends State<PresetPage> {
     final tunnels = <AppTunnel>[];
     for (final tunnelConfig in preset.tunnel) {
       tunnels.add(AppTunnel(
-        appName: '${preset.name}-${tunnelConfig.type.toUpperCase()}${tunnelConfig.cport}',
+        appName:
+            '${preset.name}-${tunnelConfig.type.toUpperCase()}${tunnelConfig.cport}',
         protocol: tunnelConfig.type,
         underlayProtocol: '',
         punchPriority: 0,
@@ -191,8 +192,8 @@ class _PresetPageState extends State<PresetPage> {
                 Text(
                   tunnelSummary,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                 ),
               ],
             ),

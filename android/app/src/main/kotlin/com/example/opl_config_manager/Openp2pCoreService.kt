@@ -26,6 +26,7 @@ class Openp2pCoreService : VpnService() {
     }
     @Volatile private var stopping = false
     @Volatile private var coreStarted = false
+    private val vpnBridge by lazy { AndroidVpnBridge(this) }
 
     override fun onCreate() {
         super.onCreate()
@@ -34,7 +35,7 @@ class Openp2pCoreService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
-            preferences.edit().putBoolean(KEY_DESIRED_RUNNING, false).apply()
+            preferences.edit().putBoolean(KEY_DESIRED_RUNNING, false).commit()
             stopping = true
             stopSelf()
             return START_NOT_STICKY
@@ -64,6 +65,7 @@ class Openp2pCoreService : VpnService() {
                 .apply()
             stopping = false
             coreStarted = true
+            vpnBridge.start()
 
             executor.execute {
                 runCore(baseDir, token, shareBandwidth, logLevel)
@@ -138,6 +140,7 @@ class Openp2pCoreService : VpnService() {
     override fun onDestroy() {
         stopping = true
         coreStarted = false
+        vpnBridge.stop()
         try {
             Openp2p.stopModule()
         } catch (t: Throwable) {
@@ -147,7 +150,14 @@ class Openp2pCoreService : VpnService() {
         super.onDestroy()
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
+
+    override fun onRevoke() {
+        preferences.edit().putBoolean(KEY_DESIRED_RUNNING, false).commit()
+        stopping = true
+        stopSelf()
+        super.onRevoke()
+    }
 
     private fun startForegroundServiceNotification() {
         val channelId = "opl_core"

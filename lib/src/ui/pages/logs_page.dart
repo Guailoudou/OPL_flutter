@@ -4,12 +4,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:archive/archive.dart';
-import 'package:share_plus/share_plus.dart';
 
-import '../../core/platform_paths.dart';
+import '../../core/platform_support.dart';
 import '../../state/app_controller.dart';
 import '../../state/log_store.dart';
+import '../../services/log_export_service.dart';
 
 class LogsPage extends StatefulWidget {
   const LogsPage({super.key});
@@ -21,21 +20,22 @@ class LogsPage extends StatefulWidget {
 class _LogsPageState extends State<LogsPage> {
   final ScrollController _scrollController = ScrollController();
   bool _autoScroll = true;
+  LogStore? _logs;
 
   @override
   void initState() {
     super.initState();
     // 监听日志更新
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final logs = Provider.of<LogStore>(context, listen: false);
+      if (!mounted) return;
+      final logs = _logs = Provider.of<LogStore>(context, listen: false);
       logs.addListener(_onLogsChanged);
     });
   }
 
   @override
   void dispose() {
-    final logs = Provider.of<LogStore>(context, listen: false);
-    logs.removeListener(_onLogsChanged);
+    _logs?.removeListener(_onLogsChanged);
     _scrollController.dispose();
     super.dispose();
   }
@@ -56,151 +56,52 @@ class _LogsPageState extends State<LogsPage> {
   }
 
   Future<void> _exportLogs() async {
-    var loadingDialogVisible = false;
     try {
-      // 显示加载对话框
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const AlertDialog(
-          title: Text('导出中'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('正在导出日志文件...'),
-            ],
-          ),
-        ),
-      );
-      loadingDialogVisible = true;
-
-      // 获取OPL目录
-      final oplDir = await PlatformPaths.configDir();
-      if (!await oplDir.exists()) {
-        throw Exception('OPL目录不存在');
+      final service = LogExportService();
+      final path = await service.exportLogs();
+      if (!mounted) return;
+      if (path == null) throw StateError('No logs available');
+      if (PlatformSupport.isMobile) {
+        await service.shareLogs(path);
+      } else {
+        await showDialog<void>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+                  title: const Text('日志已导出'),
+                  content: SelectableText(path),
+                  actions: [
+                    TextButton(
+                        onPressed: () {
+                          Navigator.pop(dialogContext);
+                          _openFileManager(path);
+                        },
+                        child: const Text('打开文件夹'))
+                  ],
+                ));
       }
-
-      // 获取执行目录
-      final execDir = Directory.current;
-
-      // 创建压缩文件名
-      final timestamp = DateTime.now().toString().replaceAll(RegExp(r'[\/:]'), '-');
-      final zipFileName = 'opl_logs_$timestamp.zip';
-      final outputDir = Platform.isAndroid
-          ? await Directory.systemTemp.createTemp('opl_logs_')
-          : execDir;
-      final zipFile = File(p.join(outputDir.path, zipFileName));
-
-      // 创建压缩文件
-      final archive = Archive();
-
-      // 递归添加OPL目录中的所有文件
-      await _addDirectoryToArchive(oplDir, archive, 'OPL');
-
-      // 生成压缩数据
-      final zipData = ZipEncoder().encode(archive);
-      if (zipData == null) {
-        throw Exception('压缩失败');
-      }
-
-      // 写入压缩文件
-      await zipFile.writeAsBytes(zipData);
-
-      // 关闭加载对话框
-      Navigator.of(context).pop();
-      loadingDialogVisible = false;
-
-      if (Platform.isAndroid) {
-        await Share.shareXFiles(
-          [XFile(zipFile.path, mimeType: 'application/zip')],
-          subject: 'OPL 日志文件',
-          text: 'OPL 应用日志导出',
-        );
-        return;
-      }
-
-      // 显示成功对话框
-      await showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('导出成功'),
-          content: Text('日志已导出到：${zipFile.path}'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('确定'),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                // 打开文件管理器
-                await _openFileManager(zipFile.path);
-              },
-              child: const Text('打开文件夹'),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      // 关闭加载对话框
-      if (mounted && loadingDialogVisible) {
-        Navigator.of(context).pop();
-      }
-
-      // 显示错误对话框
-      if (mounted) {
-        await showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('导出失败'),
-            content: Text('导出日志时出错：$e'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('确定'),
-              ),
-            ],
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _addDirectoryToArchive(Directory dir, Archive archive, String basePath) async {
-    final files = await dir.list(recursive: true).toList();
-    for (final file in files) {
-      if (file is File) {
-        final fileName = p.basename(file.path);
-        // 排除核心文件
-        if (fileName == 'openp2p-opl.exe' || fileName == 'openp2p-opl') {
-          continue;
-        }
-        final archivePath = p.join(basePath, p.relative(file.path, from: dir.path));
-        final content = await file.readAsBytes();
-        final archiveFile = ArchiveFile(archivePath, content.length, content);
-        archive.addFile(archiveFile);
-      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('导出失败： $error')));
     }
   }
 
   Future<void> _openFileManager(String path) async {
     try {
-      if (Platform.isWindows) {
+      if (PlatformSupport.isWindows) {
         // 对于Windows，使用/select参数选择文件
         await Process.run('explorer.exe', ['/select,', path]);
-      } else if (Platform.isMacOS) {
+      } else if (PlatformSupport.isMacOS) {
         // 对于MacOS，打开包含文件的文件夹
         final dirPath = p.dirname(path);
         await Process.run('open', [dirPath]);
-      } else if (Platform.isLinux) {
+      } else if (PlatformSupport.isLinux) {
         // 对于Linux，打开包含文件的文件夹
         final dirPath = p.dirname(path);
         await Process.run('xdg-open', [dirPath]);
       }
     } catch (e) {
-      print('打开文件管理器失败：$e');
+      debugPrint('打开文件管理器失败：$e');
     }
   }
 
@@ -229,12 +130,14 @@ class _LogsPageState extends State<LogsPage> {
                 );
               }
             },
-            icon: _autoScroll ? const Icon(Icons.auto_fix_high) : const Icon(Icons.auto_fix_off),
+            icon: _autoScroll
+                ? const Icon(Icons.auto_fix_high)
+                : const Icon(Icons.auto_fix_off),
           ),
           const SizedBox(width: 8),
           IconButton(
             tooltip: '导出日志',
-            onPressed: _exportLogs,
+            onPressed: PlatformSupport.isWeb ? null : _exportLogs,
             icon: const Icon(Icons.download),
           ),
           IconButton(

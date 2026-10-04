@@ -1,3 +1,4 @@
+import '../core/platform_support.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -20,7 +21,33 @@ class AppRoot extends StatefulWidget {
 class _AppRootState extends State<AppRoot> with WindowListener {
   final SystemTray _systemTray = SystemTray();
   bool _isTrayInitialized = false;
-  AppController? _controller;
+  AppController? _trayController;
+  bool? _lastTrayCoreState;
+  Future<void> _trayUpdates = Future<void>.value();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = context.read<AppController>();
+    if (!identical(controller, _trayController)) {
+      _trayController?.removeListener(_syncTrayMenu);
+      _trayController = controller;
+      controller.addListener(_syncTrayMenu);
+    }
+    _syncTrayMenu();
+  }
+
+  void _syncTrayMenu() {
+    if (!mounted || !_isTrayInitialized) return;
+    final running = _trayController?.coreRunning ?? false;
+    if (running == _lastTrayCoreState) return;
+    _lastTrayCoreState = running;
+    _trayUpdates = _trayUpdates.then((_) async {
+      if (mounted && _isTrayInitialized) await _updateTrayMenu(running);
+    }).catchError((Object error) {
+      L.e('Failed to update tray menu', tag: 'app', error: error);
+    });
+  }
 
   @override
   void initState() {
@@ -29,14 +56,16 @@ class _AppRootState extends State<AppRoot> with WindowListener {
       windowManager.addListener(this);
       _initPreventClose();
 
-      if (Platform.isWindows) {
+      if (PlatformSupport.isWindows) {
         _initTrayIcon();
       }
     }
   }
 
   bool get _isDesktop =>
-      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+      PlatformSupport.isWindows ||
+      PlatformSupport.isLinux ||
+      PlatformSupport.isMacOS;
 
   void _initTrayEventHandler() {
     // 注册托盘事件处理器
@@ -54,11 +83,11 @@ class _AppRootState extends State<AppRoot> with WindowListener {
 
   void _handleTrayAction(String action) async {
     L.d('tray action: $action', tag: 'app');
-    
+
     // 确保获取最新的 controller
     if (!mounted) return;
     final controller = Provider.of<AppController>(context, listen: false);
-    
+
     switch (action) {
       case 'show':
         await _showWindow();
@@ -71,7 +100,7 @@ class _AppRootState extends State<AppRoot> with WindowListener {
         }
         // 延迟更新菜单以确保状态已更新
         await Future.delayed(const Duration(milliseconds: 200));
-        await _updateTrayMenu(!controller.coreRunning);
+        await _updateTrayMenu(controller.coreRunning);
         break;
       case 'exit':
         await _handleAppExit();
@@ -87,7 +116,7 @@ class _AppRootState extends State<AppRoot> with WindowListener {
   @override
   void onWindowClose() async {
     L.d('window close event detected', tag: 'app');
-    
+
     // 使用 MaterialApp 的 navigator key 获取 context 来显示对话框
     final navigatorContext = rootNavigatorKey.currentContext;
     if (navigatorContext == null) {
@@ -95,16 +124,18 @@ class _AppRootState extends State<AppRoot> with WindowListener {
       await _handleAppExit();
       return;
     }
-    
-    final controller = Provider.of<AppController>(navigatorContext, listen: false);
+
+    final controller =
+        Provider.of<AppController>(navigatorContext, listen: false);
     await _handleWindowClose(navigatorContext, controller);
   }
 
   @override
   void dispose() {
+    _trayController?.removeListener(_syncTrayMenu);
     if (_isDesktop) {
       windowManager.removeListener(this);
-      if (Platform.isWindows && _isTrayInitialized) {
+      if (PlatformSupport.isWindows && _isTrayInitialized) {
         _systemTray.destroy();
       }
     }
@@ -113,14 +144,14 @@ class _AppRootState extends State<AppRoot> with WindowListener {
 
   Future<void> _initTrayIcon() async {
     if (_isTrayInitialized) return;
-    
+
     try {
       // Initialize system tray
       await _systemTray.initSystemTray(
         title: 'OPL联机工具',
         iconPath: 'assets/icons/icon.ico',
       );
-      
+
       // Create menu with click handlers
       final menu = Menu();
       await menu.buildFrom([
@@ -147,14 +178,15 @@ class _AppRootState extends State<AppRoot> with WindowListener {
           },
         ),
       ]);
-      
+
       await _systemTray.setContextMenu(menu);
-      
+
       // 注册事件处理器
       _initTrayEventHandler();
-      
+
       _isTrayInitialized = true;
-      
+      _syncTrayMenu();
+
       L.i('tray icon initialized', tag: 'app');
     } catch (e) {
       L.e('failed to init tray', tag: 'app', error: e);
@@ -174,7 +206,8 @@ class _AppRootState extends State<AppRoot> with WindowListener {
       MenuItemLabel(
         label: coreRunning ? '关闭核心' : '启动核心',
         onClicked: (menuItem) async {
-          L.d('tray menu clicked: ${coreRunning ? '关闭核心' : '启动核心'}', tag: 'app');
+          L.d('tray menu clicked: ${coreRunning ? '关闭核心' : '启动核心'}',
+              tag: 'app');
           _handleTrayAction('toggle_core');
         },
       ),
@@ -187,12 +220,12 @@ class _AppRootState extends State<AppRoot> with WindowListener {
         },
       ),
     ]);
-    
+
     await _systemTray.setContextMenu(menu);
   }
 
   Future<void> _showWindow() async {
-    if (Platform.isWindows) {
+    if (PlatformSupport.isWindows) {
       // Restore window from minimized state
       await windowManager.restore();
       await windowManager.focus();
@@ -214,10 +247,10 @@ class _AppRootState extends State<AppRoot> with WindowListener {
       // Give it a moment to ensure the process is killed
       await Future.delayed(const Duration(milliseconds: 500));
     }
-    
+
     // Only exit on desktop platforms
     if (_isDesktop) {
-      if (Platform.isWindows && _isTrayInitialized) {
+      if (PlatformSupport.isWindows && _isTrayInitialized) {
         _systemTray.destroy();
       }
       windowManager.removeListener(this);
@@ -259,10 +292,12 @@ class _AppRootState extends State<AppRoot> with WindowListener {
     await windowManager.hide();
   }
 
-  Future<void> _handleWindowClose(BuildContext context, AppController controller) async {
-    L.d('handling window close, runInBackground: ${controller.settings.runInBackground}, askBeforeMinimize: ${controller.settings.askBeforeMinimize}', tag: 'app');
-    
-    if (!Platform.isWindows) {
+  Future<void> _handleWindowClose(
+      BuildContext context, AppController controller) async {
+    L.d('handling window close, runInBackground: ${controller.settings.runInBackground}, askBeforeMinimize: ${controller.settings.askBeforeMinimize}',
+        tag: 'app');
+
+    if (!PlatformSupport.isWindows) {
       await _handleAppExit();
       return;
     }
@@ -270,57 +305,39 @@ class _AppRootState extends State<AppRoot> with WindowListener {
     // Check if user has already made a choice
     final runInBackground = controller.settings.runInBackground;
     final askBeforeMinimize = controller.settings.askBeforeMinimize;
-    
+
     // 如果开启了询问，先询问用户
     if (askBeforeMinimize) {
       // Show dialog to ask user
       L.d('showing close dialog', tag: 'app');
       final result = await _showBackgroundDialog(context);
-      
+
       L.d('dialog result: $result', tag: 'app');
-      
+
       if (result == null) {
         // User cancelled, do nothing (window stays open)
         L.d('user cancelled close', tag: 'app');
         return;
       }
-      
-      final choice = result;
-      final shouldAskAgain = controller.settings.askBeforeMinimize;
-      
+
+      final choice = result.$1;
+      final shouldAskAgain = result.$2;
+
       if (choice) {
         // User chose to run in background
         L.d('user chose background run, askAgain: $shouldAskAgain', tag: 'app');
-        await controller.settingsStore.save(
-          controller.settings.copyWith(
-            runInBackground: true,
-            askBeforeMinimize: shouldAskAgain,
-          ),
-        );
-        // Update controller settings
-        controller.settings = controller.settings.copyWith(
+        await controller.updateSettings(controller.settings.copyWith(
           runInBackground: true,
           askBeforeMinimize: shouldAskAgain,
-        );
+        ));
         await _minimizeToTray();
       } else {
         // User chose to exit
         L.d('user chose to exit, askAgain: $shouldAskAgain', tag: 'app');
-        await controller.settingsStore.save(
-          controller.settings.copyWith(
-            runInBackground: false,
-            askBeforeMinimize: shouldAskAgain,
-          ),
-        );
-        // Update controller settings
-        controller.settings = controller.settings.copyWith(
+        await controller.updateSettings(controller.settings.copyWith(
           runInBackground: false,
           askBeforeMinimize: shouldAskAgain,
-        );
-        // Close dialog first, then exit
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
+        ));
         await _handleAppExit();
       }
     } else {
@@ -337,13 +354,13 @@ class _AppRootState extends State<AppRoot> with WindowListener {
     }
   }
 
-  Future<bool?> _showBackgroundDialog(BuildContext context) async {
+  Future<(bool, bool)?> _showBackgroundDialog(BuildContext context) async {
     // 从配置文件中读取当前的 askBeforeMinimize 值
     final controller = Provider.of<AppController>(context, listen: false);
     bool askAgain = controller.settings.askBeforeMinimize; // 默认使用配置文件中的值
-    
+
     try {
-      return showDialog<bool>(
+      return showDialog<(bool, bool)>(
         context: context,
         barrierDismissible: false, // 防止点击外部关闭
         useRootNavigator: true, // 使用 root navigator
@@ -365,12 +382,6 @@ class _AppRootState extends State<AppRoot> with WindowListener {
                       setDialogState(() {
                         askAgain = value ?? true;
                       });
-                      // 更新全局设置并通知 UI
-                      final controller = Provider.of<AppController>(context, listen: false);
-                      controller.settings = controller.settings.copyWith(
-                        askBeforeMinimize: askAgain,
-                      );
-                      controller.notifyListeners(); // 通知所有监听者更新 UI
                     },
                   ),
                 ],
@@ -384,13 +395,13 @@ class _AppRootState extends State<AppRoot> with WindowListener {
                 ),
                 TextButton(
                   onPressed: () {
-                    Navigator.of(context).pop(false); // 选择"否"，完全关闭
+                    Navigator.of(context).pop((false, askAgain)); // 选择"否"，完全关闭
                   },
                   child: const Text('否，完全关闭'),
                 ),
                 FilledButton(
                   onPressed: () {
-                    Navigator.of(context).pop(true); // 选择"是"，后台运行
+                    Navigator.of(context).pop((true, askAgain)); // 选择"是"，后台运行
                   },
                   child: const Text('是，后台运行'),
                 ),
@@ -402,7 +413,7 @@ class _AppRootState extends State<AppRoot> with WindowListener {
     } catch (e) {
       L.e('error showing dialog', tag: 'app', error: e);
       // 如果对话框显示失败，直接返回 false 退出
-      return false;
+      return null;
     }
   }
 }

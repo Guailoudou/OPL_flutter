@@ -5,6 +5,12 @@ const api = axios.create({
   timeout: 10000
 })
 
+api.interceptors.request.use(config => {
+  const token = sessionStorage.getItem('opl.adminToken')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
 // 预设隧道
 export const presetApi = {
   list: () => api.get('/preset'),

@@ -62,16 +62,19 @@ class ConnectionCode {
       final dstPort = int.tryParse(components[2].trim());
       final srcPort = int.tryParse(components[3].trim());
 
-      if (dstPort == null || dstPort <= 0) {
+      if (dstPort == null || dstPort <= 0 || dstPort > 65535) {
         throw Exception('远程端口无效');
       }
-      if (srcPort == null || srcPort <= 0) {
+      if (srcPort == null || srcPort <= 0 || srcPort > 65535) {
         throw Exception('本地端口无效');
       }
-      if (uid.isEmpty) {
-        throw Exception('UID 不能为空');
+      if (!RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(uid)) {
+        throw Exception('UID 必须是 16 位十六进制字符串');
       }
 
+      if (protocolNum != '1' && protocolNum != '2') {
+        throw Exception('协议必须为 1 (TCP) 或 2 (UDP)');
+      }
       final protocol = protocolNum == '2' ? 'udp' : 'tcp';
 
       return AppTunnel(
@@ -94,11 +97,11 @@ class ConnectionCode {
       final uid = components[0].trim();
       final port = int.tryParse(components[1].trim());
 
-      if (port == null || port <= 0) {
+      if (port == null || port <= 0 || port > 65535) {
         throw Exception('端口无效');
       }
-      if (uid.isEmpty) {
-        throw Exception('UID 不能为空');
+      if (!RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(uid)) {
+        throw Exception('UID 必须是 16 位十六进制字符串');
       }
 
       return AppTunnel(

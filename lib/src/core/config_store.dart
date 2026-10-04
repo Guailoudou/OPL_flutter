@@ -2,82 +2,79 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'config_models.dart';
-import '../utils/logger.dart';
 import 'platform_paths.dart';
+import 'text_document_store.dart';
 import 'uid.dart';
 
 class ConfigStore {
-  ConfigStore();
+  ConfigStore({Future<File> Function()? fileProvider})
+      : _document =
+            TextDocumentStore('config.json', fileProvider: fileProvider);
+
+  final TextDocumentStore _document;
 
   Future<File> get file async => PlatformPaths.configFile();
 
   Future<ConfigRoot> loadOrCreate() async {
-    final f = await file;
-    if (!await f.exists()) {
+    final raw = await _document.read();
+    if (raw == null) {
       final created = ConfigRoot.defaults();
       final fixed = _ensureUid(created);
       await save(fixed);
       return fixed;
     }
 
-    try {
-      final raw = await f.readAsString();
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map<String, dynamic>) {
-        final reset = _ensureUid(ConfigRoot.defaults());
-        await save(reset);
-        return reset;
-      }
-      final cfg = ConfigRoot.fromJson(decoded);
-      final fixed = _ensureUid(cfg);
-      // Only save if UID was actually changed
-      if (fixed.network.node != cfg.network.node) {
-        await save(fixed);
-      }
-      return fixed;
-    } catch (e) {
-      // Only reset on parse error, don't reset on other errors
-      L.e('Failed to load config', tag: 'config', error: e);
-      final reset = _ensureUid(ConfigRoot.defaults());
-      await save(reset);
-      return reset;
+    // Surface read/parse failures; never overwrite the user's configuration.
+    final cfg = decode(raw);
+    final fixed = _ensureUid(cfg);
+    if (fixed.network.node != cfg.network.node) {
+      await save(fixed);
     }
+    return fixed;
+  }
+
+  /// Decodes config JSON without routing an unsigned 64-bit token through a
+  /// Dart [num]. Dart/ArkTS cannot represent every uint64 value exactly, while
+  /// OpenP2P intentionally stores Token as a raw JSON integer. Quote only that
+  /// field in the in-memory JSON copy so [NetworkConfig] can use BigInt.parse.
+  static ConfigRoot decode(String raw) {
+    final precisionSafeJson = raw.replaceAllMapped(
+      RegExp(r'("(?:Token|token)"\s*:\s*)(\d+)(\s*[,}])'),
+      (match) => '${match.group(1)}"${match.group(2)}"${match.group(3)}',
+    );
+    final decoded = jsonDecode(precisionSafeJson);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('config root must be a JSON object');
+    }
+    return ConfigRoot.fromJson(decoded);
   }
 
   Future<void> save(ConfigRoot root) async {
-    final f = await file;
+    if (root.network.token < BigInt.zero ||
+        root.network.token >= (BigInt.one << 64)) {
+      throw const FormatException('Token is outside the unsigned 64-bit range');
+    }
     final encoder = const JsonEncoder.withIndent('  ');
     var json = encoder.convert(root.toJson());
-    
-    // Fix token value: replace quoted string with raw number to preserve large values
-    // This is needed because BigInt.toString() produces a quoted string in JSON,
-    // but the core expects a numeric value
+
+    // Keep the on-disk value as an exact raw uint64 for the Go core. load() uses
+    // a precision-safe in-memory representation before Dart parses the JSON.
     json = json.replaceAllMapped(
       RegExp(r'"Token":\s*"(\d+)"'),
       (match) => '"Token": ${match.group(1)}',
     );
-    
-    await f.writeAsString(json);
+
+    await _document.write(json);
   }
 
   ConfigRoot _ensureUid(ConfigRoot root) {
     final raw = root.network.node.trim();
-    // Treat empty or all zeros as invalid
-    if (raw.isEmpty || raw == '0000000000000000') {
+    if (!RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(raw) ||
+        raw == '0000000000000000') {
       final uid = Uid.generate16();
       return root.copyWith(network: root.network.copyWith(node: uid));
     }
-    
-    // Check if it's valid 16-hex (case insensitive)
-    // final isValid = RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(raw);
-    // if (isValid) {
-      // UID is valid, return as-is without modification
-      return root;
-    // }
-    
-    // Invalid format, generate new UID
-    // final uid = Uid.generate16();
-    // return root.copyWith(network: root.network.copyWith(node: uid));
+
+    return root;
   }
 }
-

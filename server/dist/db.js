@@ -25,7 +25,22 @@ class JsonDB {
         return JSON.parse(content);
     }
     write(data) {
-        fs_1.default.writeFileSync(this.filePath, JSON.stringify(data, null, 2), 'utf-8');
+        const temporary = `${this.filePath}.tmp`;
+        try {
+            fs_1.default.writeFileSync(temporary, JSON.stringify(data, null, 2), { encoding: 'utf-8', flag: 'w' });
+            const fd = fs_1.default.openSync(temporary, 'r+');
+            try {
+                fs_1.default.fsyncSync(fd);
+            }
+            finally {
+                fs_1.default.closeSync(fd);
+            }
+            fs_1.default.renameSync(temporary, this.filePath);
+        }
+        finally {
+            if (fs_1.default.existsSync(temporary))
+                fs_1.default.unlinkSync(temporary);
+        }
     }
 }
 exports.JsonDB = JsonDB;

@@ -1,7 +1,7 @@
+import '../core/platform_support.dart';
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import '../core/config_models.dart';
@@ -9,12 +9,13 @@ import '../core/config_store.dart';
 import '../core/notice_service.dart';
 import '../core/settings_models.dart';
 import '../core/settings_store.dart';
+import '../core/ohos_core_service.dart';
 import '../core/platform_paths.dart';
 import '../core/url_config.dart';
+import '../core/uid.dart';
 import '../core/easytier_service.dart';
 import '../app/navigation.dart';
 import '../utils/logger.dart';
-import '../services/isp_warning_service.dart';
 import '../services/autostart_service.dart';
 import '../services/update_service.dart';
 import 'core_runner.dart';
@@ -24,40 +25,73 @@ class AppController extends ChangeNotifier {
   final _store = ConfigStore();
   final _settingsStore = SettingsStore();
   final LogStore _logs;
-  late final CoreRunner coreRunner;
+  late final CoreRunner coreRunner = CoreRunner(
+    logs: logs,
+    onCoreVersionChanged: _updateCoreVersion,
+    onStateChanged: notifyListeners,
+  );
   final UpdateService updateService;
   final autoStartService = AutoStartService();
   final easyTierService = EasyTierService();
+  bool _disposed = false;
+  Future<void> _settingsChanges = Future<void>.value();
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _logs.onNewLine = null;
+    coreRunner.dispose();
+    easyTierService.dispose();
+    updateService.dispose();
+    super.dispose();
+  }
 
   bool booting = true;
+  bool ohosBackgroundKeepAlive = true;
+  bool ohosPictureInPicture = false;
+
+  Future<void> setOhosKeepAlive(bool enabled,
+      {bool pictureInPicture = false}) async {
+    final available = await OhosCoreService.setKeepAlive(enabled,
+        pictureInPicture: pictureInPicture);
+    if (!available) throw StateError('系统未允许此保活方式，请检查授权和设备支持');
+    if (pictureInPicture) {
+      ohosPictureInPicture = enabled;
+    } else {
+      ohosBackgroundKeepAlive = enabled;
+    }
+    notifyListeners();
+  }
+
   String? bootError;
   ConfigRoot? config;
   AppSettings settings = AppSettings.defaults();
-  
+
   // 预加载的公告数据
   List<Notice> _cachedNotices = [];
   bool _noticesLoaded = false;
 
   // Expose settings store for external access
   SettingsStore get settingsStore => _settingsStore;
-  
+
   LogStore get logs => _logs;
 
   AppController({LogStore? logStore})
       : _logs = logStore ?? LogStore(),
         updateService = UpdateService();
-  
+
   // 暴露公告数据供页面使用
   List<Notice> get cachedNotices => _cachedNotices;
   bool get noticesLoaded => _noticesLoaded;
 
   Future<void> init() async {
+    var initialized = false;
     try {
-      // Check and request admin privileges on Windows
-      if (Platform.isWindows) {
-        await _checkAndRequestAdmin();
-      }
-
       config = await _store.loadOrCreate();
       settings = await _settingsStore.loadOrCreate();
       // Migrate the old desktop default. On Android, localhost points to the
@@ -69,22 +103,30 @@ class AppController extends ChangeNotifier {
       // 初始化 URL 配置
       UrlConfig.setApiBase(settings.apiBase);
       UrlConfig.setUseGitee(settings.useGiteeMirror);
+      if (PlatformSupport.isOhos) {
+        final options = await OhosCoreService.getKeepAliveOptions();
+        ohosBackgroundKeepAlive = options['continuousTask'] == true;
+        ohosPictureInPicture = options['pictureInPicture'] == true;
+      }
       logs.onNewLine = _handleLogLine;
-      coreRunner = CoreRunner(
-        logs: logs,
-        onCoreVersionChanged: _updateCoreVersion,
-      );
+      await coreRunner.initialize();
       easyTierService.onVersionChanged = _updateEasyTierVersion;
 
       // 初始化 UpdateService 回调
       updateService
+        ..beforeInstall = (component) async {
+          if (component == UpdateComponent.core && coreRunning) {
+            await stopCore();
+          }
+          if (component == UpdateComponent.easytier &&
+              easyTierService.isRunning) {
+            await easyTierService.stop();
+          }
+        }
         ..onCoreVersionChanged = _updateCoreVersion
         ..onEasytierVersionChanged = _updateEasyTierVersion;
       await updateService.detectInstalledVersions();
-      await updateService.checkAllUpdates();
-
-      // 预加载公告数据
-      _preloadNotices();
+      initialized = true;
       // 运营商检测已移除，不再在启动时自动检测
     } catch (e) {
       bootError = e.toString();
@@ -92,75 +134,39 @@ class AppController extends ChangeNotifier {
       booting = false;
       notifyListeners();
     }
-  }
 
-  Future<void> _checkAndRequestAdmin() async {
-    // Check if running as admin
-    if (await _isRunningAsAdmin()) {
-      logs.add('[app] running with admin privileges');
-      return;
-    }
-    
-    logs.add('[app] requesting admin privileges...');
-    
-    try {
-      // Restart with admin privileges
-      final exePath = Platform.resolvedExecutable;
-      final result = await Process.start(
-        'powershell',
-        [
-          '-WindowStyle',
-          'Hidden',
-          '-Command',
-          'Start-Process -FilePath "$exePath" -Verb RunAs',
-        ],
-        runInShell: true,
-      );
-      
-      // Exit current non-admin instance
-      logs.add('[app] restarting with admin privileges...');
-      exit(0);
-    } catch (e) {
-      logs.add('[app] failed to request admin: $e');
-      // Continue without admin if request fails
-    }
-  }
-
-  Future<bool> _isRunningAsAdmin() async {
-    try {
-      final result = await Process.run(
-        'powershell',
-        ['-Command', '([Security.Principal.WindowsIdentity]::GetCurrent().Owner).IsWellKnown([Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid)'],
-        runInShell: true,
-      );
-      return result.stdout.toString().trim().toLowerCase() == 'true';
-    } catch (e) {
-      return false;
+    // 网络任务不应让应用一直停留在启动页。本地初始化完成后，
+    // 先渲染主界面，再让更新检查和公告预加载在后台继续执行。
+    if (initialized) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(updateService.checkAllUpdates());
+        unawaited(_preloadNotices());
+      });
     }
   }
 
   Future<void> _checkNotices() async {
     L.d('checking notices...', tag: 'app');
-    
+
     // 确保公告数据已加载
     if (!_noticesLoaded || _cachedNotices.isEmpty) {
       L.d('notices not loaded yet, loading...', tag: 'app');
       await _preloadNotices();
     }
-    
+
     if (_cachedNotices.isEmpty) {
       L.w('no notices available', tag: 'app');
       return;
     }
 
     L.d('checking ${_cachedNotices.length} cached notices', tag: 'app');
-    
+
     final latestNotice = _cachedNotices.first;
     final lastTime = settings.lastNoticeTime;
-    
+
     L.d('latest notice time: ${latestNotice.time}', tag: 'app');
     L.d('last stored time: $lastTime', tag: 'app');
-    
+
     // 比较最新公告时间和存储的时间
     bool hasNew = false;
     if (lastTime == null || lastTime.isEmpty) {
@@ -168,24 +174,26 @@ class AppController extends ChangeNotifier {
       hasNew = true;
     } else {
       try {
-        final latestTime = DateTime.parse(latestNotice.time.replaceAll(' ', 'T'));
+        final latestTime =
+            DateTime.parse(latestNotice.time.replaceAll(' ', 'T'));
         final storedTime = DateTime.parse(lastTime.replaceAll(' ', 'T'));
         hasNew = latestTime.isAfter(storedTime);
-        L.d('time comparison: latest=$latestTime, stored=$storedTime, hasNew=$hasNew', tag: 'app');
+        L.d('time comparison: latest=$latestTime, stored=$storedTime, hasNew=$hasNew',
+            tag: 'app');
       } catch (_) {
         // 如果解析失败，使用字符串比较
         hasNew = latestNotice.time.compareTo(lastTime) > 0;
         L.d('string comparison: hasNew=$hasNew', tag: 'app');
       }
     }
-    
+
     if (hasNew) {
       L.i('showing notice dialog: ${latestNotice.title}', tag: 'app');
       _showNoticeDialog(latestNotice);
-      
+
       // 更新存储的时间为最新公告的时间
-      settings = settings.copyWith(lastNoticeTime: latestNotice.time);
-      await _settingsStore.save(settings);
+      await _changeSettings(
+          (value) => value.copyWith(lastNoticeTime: latestNotice.time));
       L.d('saved lastNoticeTime: ${latestNotice.time}', tag: 'app');
     } else {
       L.d('no new notices', tag: 'app');
@@ -200,15 +208,16 @@ class AppController extends ChangeNotifier {
       final response = await service.fetchNotices();
       if (response != null && response.notices.isNotEmpty) {
         // 按时间排序（最新的在前）
-        _cachedNotices = List<Notice>.from(response.notices)..sort((a, b) {
-          try {
-            final timeA = DateTime.parse(a.time.replaceAll(' ', 'T'));
-            final timeB = DateTime.parse(b.time.replaceAll(' ', 'T'));
-            return timeB.compareTo(timeA);
-          } catch (_) {
-            return b.time.compareTo(a.time);
-          }
-        });
+        _cachedNotices = List<Notice>.from(response.notices)
+          ..sort((a, b) {
+            try {
+              final timeA = DateTime.parse(a.time.replaceAll(' ', 'T'));
+              final timeB = DateTime.parse(b.time.replaceAll(' ', 'T'));
+              return timeB.compareTo(timeA);
+            } catch (_) {
+              return b.time.compareTo(a.time);
+            }
+          });
         _noticesLoaded = true;
         L.d('preloaded ${_cachedNotices.length} notices', tag: 'app');
         notifyListeners(); // 通知 UI 更新
@@ -222,74 +231,10 @@ class AppController extends ChangeNotifier {
   Future<void> checkNotices() async {
     await _checkNotices();
   }
-  
+
   // 刷新公告数据
   Future<void> refreshNotices() async {
     await _preloadNotices();
-  }
-
-  Future<void> _checkIspWarning() async {
-    try {
-      L.d('checking ISP warning...', tag: 'app');
-
-      final ispService = IspWarningService();
-      final ispInfo = await ispService.fetchIspInfo();
-
-      if (ispInfo == null) {
-        L.w('failed to fetch ISP info', tag: 'app');
-        return;
-      }
-
-      L.d('ISP info: ${ispInfo.isp} (${ispInfo.ip})', tag: 'app');
-
-      if (ispService.shouldShowWarning(ispInfo.isp)) {
-        L.i('showing ISP warning for: ${ispInfo.isp}', tag: 'app');
-        _showIspWarningDialog(ispInfo.isp, ispService.getWarningMessage(ispInfo.isp));
-      } else {
-        L.d('ISP is mainstream, no warning needed', tag: 'app');
-      }
-    } catch (e) {
-      L.e('failed to check ISP warning', tag: 'app', error: e);
-    }
-  }
-
-  void _showIspWarningDialog(String isp, String message) {
-    final ctx = rootNavigatorKey.currentContext;
-    if (ctx == null) {
-      L.w('navigator context not ready, skipping ISP warning dialog', tag: 'app');
-      return;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        showDialog<void>(
-          context: ctx,
-          barrierDismissible: true,
-          builder: (_) => AlertDialog(
-            title: const Text('运营商警告'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('检测到您当前运营商为：$isp', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  Text(message),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('我知道了'),
-              ),
-            ],
-          ),
-        );
-      } catch (e) {
-        L.e('failed to show ISP warning dialog', tag: 'app', error: e);
-      }
-    });
   }
 
   void _showNoticeDialog(Notice notice) {
@@ -298,9 +243,9 @@ class AppController extends ChangeNotifier {
       L.w('navigator context not ready, skipping notice dialog', tag: 'app');
       return;
     }
-    
+
     L.d('showing notice dialog with context: $ctx', tag: 'app');
-    
+
     // 使用 WidgetsBinding 确保在 UI 准备好后显示
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
@@ -344,107 +289,49 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> saveConfig(ConfigRoot root) async {
+    await _store.save(root);
     config = root;
     notifyListeners();
-    await _store.save(root);
   }
 
   Future<void> resetUid() async {
     final current = config;
     if (current == null) return;
-    // Force regenerate by setting invalid value then saving.
     final updated = current.copyWith(
-      network: current.network.copyWith(node: 'invalid'),
+      network: current.network.copyWith(node: Uid.generate16()),
     );
-    await _store.save(updated);
-    await reloadConfig();
+    await saveConfig(updated);
   }
 
   Future<void> resetApp(BuildContext context) async {
-    try {
-      L.i('Starting app reset process', tag: 'app');
-      
-      // 获取 OPL 目录
-      final oplDir = await PlatformPaths.configDir();
-      L.d('OPL directory: ${oplDir.path}', tag: 'app');
-      
-      // 要删除的文件列表（不删除日志文件）
-      final filesToDelete = [
-        'openp2p-opl.exe',  // Windows 核心文件
-        'openp2p-opl',      // Linux/Mac 核心文件
-        'config.json',      // 配置文件
-        'set.json',         // 设置文件
-      ];
-      
-      // 删除文件
-      for (final fileName in filesToDelete) {
-        final filePath = p.join(oplDir.path, fileName);
-        final file = File(filePath);
-        if (await file.exists()) {
-          await file.delete();
-          L.d('Deleted file: $filePath', tag: 'app');
-        } else {
-          L.d('File not found, skipping: $filePath', tag: 'app');
-        }
-      }
-      
-      L.i('App reset completed, restarting...', tag: 'app');
-      
-      // 显示重启提示
-      if (context.mounted) {
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => AlertDialog(
-            title: const Text('重置完成'),
-            content: const Text('程序即将重启，请等待...'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('确定'),
-              ),
-            ],
-          ),
-        );
-      }
-      
-      // 重启应用
-      if (Platform.isWindows) {
-        final exePath = Platform.resolvedExecutable;
-        await Process.start(exePath, [], runInShell: true);
-        L.i('Restarting application', tag: 'app');
-        exit(0);
-      } else if (Platform.isLinux || Platform.isMacOS) {
-        final exePath = Platform.resolvedExecutable;
-        await Process.start(exePath, [], runInShell: true);
-        L.i('Restarting application', tag: 'app');
-        exit(0);
-      }
-    } catch (e) {
-      L.e('Failed to reset app', tag: 'app', error: e);
-      if (context.mounted) {
-        showDialog<void>(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('重置失败'),
-            content: Text('重置过程中发生错误：$e'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('确定'),
-              ),
-            ],
-          ),
-        );
+    await stopCore();
+    if (easyTierService.isRunning) await easyTierService.stop();
+    if (PlatformSupport.isDesktop) {
+      final dir = await PlatformPaths.configDir();
+      for (final name in ['openp2p-opl.exe', 'openp2p-opl']) {
+        final file = File(p.join(dir.path, name));
+        if (await file.exists()) await file.delete();
       }
     }
+    await _store.save(ConfigRoot.defaults());
+    await updateSettings(AppSettings.defaults());
+    await reloadConfig();
   }
 
   Future<void> updateShareBandwidth(int value) async {
     final current = config;
     if (current == null) return;
     await saveConfig(
-      current.copyWith(network: current.network.copyWith(shareBandwidth: value)),
+      current.copyWith(
+          network: current.network.copyWith(shareBandwidth: value)),
+    );
+  }
+
+  Future<void> updateToken(BigInt value) async {
+    final current = config;
+    if (current == null) return;
+    await saveConfig(
+      current.copyWith(network: current.network.copyWith(token: value)),
     );
   }
 
@@ -479,6 +366,9 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> startCore() async {
+    if (!PlatformSupport.canRunCore) {
+      throw UnsupportedError('Core execution is unavailable on this platform');
+    }
     final current = config;
     if (current == null) return;
     // Reset login status before starting
@@ -500,8 +390,8 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool get coreRunning => coreRunner.isRunning;
-  
+  bool get coreRunning => PlatformSupport.canRunCore && coreRunner.isRunning;
+
   // Core login status
   bool _coreLoggedIn = false;
   bool get coreLoggedIn => _coreLoggedIn;
@@ -520,31 +410,46 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> setTheme(AppThemeMode mode) async {
-    settings = settings.copyWith(themeMode: mode);
-    notifyListeners();
-    await _settingsStore.save(settings);
+    await _changeSettings((value) => value.copyWith(themeMode: mode));
+  }
+
+  Future<void> updateSettings(AppSettings value) =>
+      _changeSettings((_) => value);
+
+  Future<void> _changeSettings(AppSettings Function(AppSettings) change) {
+    final operation = _settingsChanges.then((_) async {
+      final value = change(settings);
+      await _settingsStore.save(value);
+      settings = value;
+      UrlConfig.setApiBase(value.apiBase);
+      UrlConfig.setUseGitee(value.useGiteeMirror);
+      notifyListeners();
+    });
+    _settingsChanges =
+        operation.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return operation;
   }
 
   Future<void> setUseGiteeMirror(bool value) async {
-    settings = settings.copyWith(useGiteeMirror: value);
-    UrlConfig.setUseGitee(value);
-    notifyListeners();
-    await _settingsStore.save(settings);
+    await _changeSettings((current) => current.copyWith(useGiteeMirror: value));
   }
 
   String? get coreVersion => settings.coreVersion;
   String? get easytierVersion => settings.easytierVersion;
 
   void _updateCoreVersion(String version) {
-    settings = settings.copyWith(coreVersion: version);
-    _settingsStore.save(settings);
-    notifyListeners();
+    unawaited(_changeSettings((value) => value.copyWith(coreVersion: version))
+        .catchError((Object error) {
+      logs.add('[settings] Failed to save core version: $error');
+    }));
   }
 
   void _updateEasyTierVersion(String version) {
-    settings = settings.copyWith(easytierVersion: version);
-    _settingsStore.save(settings);
-    notifyListeners();
+    unawaited(
+        _changeSettings((value) => value.copyWith(easytierVersion: version))
+            .catchError((Object error) {
+      logs.add('[settings] Failed to save EasyTier version: $error');
+    }));
   }
 
   // === Log pattern handling ===
@@ -557,12 +462,17 @@ class AppController extends ChangeNotifier {
       final match = RegExp(r'node=([^\s]+)').firstMatch(line);
       final node = match?.group(1);
       final current = config;
-      if (node != null && current != null && current.network.node != node) {
-        saveConfig(
+      if (Uid.isValid16Hex(node) &&
+          node != '0000000000000000' &&
+          current != null &&
+          current.network.node != node) {
+        unawaited(saveConfig(
           current.copyWith(
             network: current.network.copyWith(node: node),
           ),
-        );
+        ).catchError((Object error) {
+          logs.add('[config] Failed to save the core node: $error');
+        }));
       }
       // Set login status to true
       if (!_coreLoggedIn) {

@@ -105,7 +105,8 @@ class NetworkCard extends StatelessWidget {
                               ),
                             )
                           else
-                            ...nodes.map((node) => _buildNodeItem(context, node)),
+                            ...nodes
+                                .map((node) => _buildNodeItem(context, node)),
                         ],
                       ),
                     ),
@@ -141,29 +142,6 @@ class NetworkCard extends StatelessWidget {
             icon: const Icon(Icons.copy, size: 18),
             tooltip: '复制',
             onPressed: () => _copyToClipboard(context, value),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSimpleRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: const TextStyle(color: Colors.grey),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
           ),
         ],
       ),

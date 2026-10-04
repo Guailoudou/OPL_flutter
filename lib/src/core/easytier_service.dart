@@ -1,3 +1,4 @@
+import 'platform_support.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -228,10 +229,10 @@ class EasyTierService {
   }
 
   Future<String> _getCliPath() async {
-    final configDir = await PlatformPaths.configDir();
-    final cliName = Platform.isWindows ? 'easytier-cli.exe' : 'easytier-cli';
-    final subfolder = _getPlatformSubfolder();
-    return p.join(configDir.path, subfolder, cliName);
+    final core = await PlatformPaths.easyTierFile();
+    final cliName =
+        PlatformSupport.isWindows ? 'easytier-cli.exe' : 'easytier-cli';
+    return p.join(core.parent.path, cliName);
   }
 
   List<NetworkNode> _parseNodeList(String output) {
@@ -256,7 +257,8 @@ class EasyTierService {
       if (cells.isEmpty) continue;
 
       try {
-        final ip = _safeGet(cells, headerMap['ipv4'] ?? -1).replaceAll('/24', '');
+        final ip =
+            _safeGet(cells, headerMap['ipv4'] ?? -1).replaceAll('/24', '');
         final hostname = _safeGet(cells, headerMap['hostname'] ?? -1);
         final cost = _safeGet(cells, headerMap['cost'] ?? -1);
         final latMs = _safeGet(cells, headerMap['lat(ms)'] ?? -1);
@@ -323,21 +325,11 @@ class EasyTierService {
     return numPart.round();
   }
 
-  Future<String> _getExecutablePath() async {
-    final configDir = await PlatformPaths.configDir();
-    final exeName = Platform.isWindows ? 'easytier-core.exe' : 'easytier-core';
-    final subfolder = _getPlatformSubfolder();
-    return p.join(configDir.path, subfolder, exeName);
-  }
-
-  String _getPlatformSubfolder() {
-    if (Platform.isWindows) return 'easytier-windows-x86_64';
-    if (Platform.isLinux) return 'easytier-linux-x86_64';
-    if (Platform.isMacOS) return 'easytier-macos';
-    return 'easytier-unknown';
-  }
+  Future<String> _getExecutablePath() async =>
+      (await PlatformPaths.easyTierFile()).path;
 
   Future<bool> isEasyTierInstalled() async {
+    if (!PlatformSupport.canRunEasyTier) return false;
     final exePath = await _getExecutablePath();
     return await File(exePath).exists();
   }

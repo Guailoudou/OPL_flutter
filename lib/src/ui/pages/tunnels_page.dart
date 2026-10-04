@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/config_models.dart';
 import '../../core/connection_code.dart';
 import '../../core/platform_paths.dart';
+import '../../core/platform_support.dart';
 import '../../state/app_controller.dart';
 import '../../state/log_store.dart';
 import '../widgets/status_dot.dart';
@@ -96,7 +95,8 @@ class TunnelsPage extends StatelessWidget {
                         );
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('已复制：${tunnel.localLoopback}')),
+                            SnackBar(
+                                content: Text('已复制：${tunnel.localLoopback}')),
                           );
                         }
                         return;
@@ -224,7 +224,7 @@ class _UidBanner extends StatelessWidget {
     final controller = context.watch<AppController>();
     final isRunning = controller.coreRunning;
     final isLoggedIn = controller.coreLoggedIn;
-    
+
     Color statusColor;
     if (!isRunning) {
       statusColor = Colors.grey;
@@ -290,6 +290,13 @@ class _UidBanner extends StatelessWidget {
 class _PathBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    if (PlatformSupport.isWeb) {
+      return const Card(
+          child: Padding(
+        padding: EdgeInsets.all(12),
+        child: Text('配置保存在此浏览器中'),
+      ));
+    }
     return FutureBuilder(
       future: PlatformPaths.configFile(),
       builder: (context, snap) {
@@ -382,14 +389,16 @@ class _TunnelTile extends StatelessWidget {
   final AppTunnel tunnel;
   final _TunnelStatus status;
   final ValueChanged<bool> onToggle;
-  final Future<void> Function(_TunnelAction action, Offset tapPosition) onAction;
+  final Future<void> Function(_TunnelAction action, Offset tapPosition)
+      onAction;
 
   @override
   Widget build(BuildContext context) {
     Offset lastTapPos = Offset.zero;
 
     Future<void> showActions(Offset globalPos) async {
-      final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+      final overlay =
+          Overlay.of(context).context.findRenderObject() as RenderBox?;
       final position = RelativeRect.fromRect(
         Rect.fromLTWH(globalPos.dx, globalPos.dy, 1, 1),
         Offset.zero & (overlay?.size ?? const Size(1, 1)),
@@ -451,7 +460,7 @@ class _TunnelTile extends StatelessWidget {
                     value: tunnel.enabled == 1,
                     onChanged: (v) => onToggle(v),
                   ),
-                  if (PlatformPaths.isDesktop || Platform.isAndroid || Platform.isIOS)
+                  if (PlatformPaths.isDesktop || PlatformSupport.isMobile)
                     IconButton(
                       tooltip: PlatformPaths.isDesktop ? '右键操作' : '长按操作',
                       onPressed: () => showActions(lastTapPos),
@@ -501,8 +510,12 @@ class _FabRow extends StatelessWidget {
         const SizedBox(width: 12),
         FloatingActionButton(
           heroTag: 'start',
-          onPressed: onStart,
-          tooltip: isRunning ? '停止' : '启动',
+          onPressed: PlatformSupport.canRunCore ? onStart : null,
+          tooltip: !PlatformSupport.canRunCore
+              ? '当前平台支持配置编辑，核心请在桌面、Android 或鸿蒙运行'
+              : isRunning
+                  ? '停止'
+                  : '启动',
           child: Icon(isRunning ? Icons.pause : Icons.play_arrow),
         ),
       ],
@@ -527,7 +540,6 @@ class _TunnelEditorDialogState extends State<TunnelEditorDialog> {
   late final TextEditingController dstPort;
   bool enabled = false;
   final _formKey = GlobalKey<FormState>();
-  bool _isLoading = true;
 
   @override
   void initState() {
@@ -539,7 +551,7 @@ class _TunnelEditorDialogState extends State<TunnelEditorDialog> {
     peerNode = TextEditingController(text: t?.peerNode ?? '');
     dstPort = TextEditingController(text: (t?.dstPort ?? 0).toString());
     enabled = (t?.enabled ?? 0) == 1;
-    
+
     dstPort.addListener(() {
       if (srcPort.text != dstPort.text) {
         srcPort.text = dstPort.text;
@@ -561,30 +573,30 @@ class _TunnelEditorDialogState extends State<TunnelEditorDialog> {
   bool _validateAndSave() {
     final form = _formKey.currentState;
     if (!form!.validate()) return false;
-    
+
     form.save();
-    
+
     if (peerNode.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('远程 UID 不能为空')),
       );
       return false;
     }
-    
+
     if (dstPort.text.trim().isEmpty || _toPort(dstPort.text) == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('远程端口不能为空且必须大于 0')),
       );
       return false;
     }
-    
+
     if (srcPort.text.trim().isEmpty || _toPort(srcPort.text) == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('本地端口不能为空且必须大于 0')),
       );
       return false;
     }
-    
+
     return true;
   }
 
@@ -602,12 +614,11 @@ class _TunnelEditorDialogState extends State<TunnelEditorDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _Field(
-                  label: '隧道名称（AppName）',
-                  controller: name,
-                  hint: '例如：自定义隧道'
-                ),
+                    label: '隧道名称（AppName）', controller: name, hint: '例如：自定义隧道'),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
+                  // Retain compatibility with the OHOS Flutter SDK.
+                  // ignore: deprecated_member_use
                   value: protocol,
                   decoration: const InputDecoration(
                     labelText: '协议（Protocol）',
@@ -665,7 +676,7 @@ class _TunnelEditorDialogState extends State<TunnelEditorDialog> {
         FilledButton(
           onPressed: () {
             if (!_validateAndSave()) return;
-            
+
             final base = widget.initial;
             final t = AppTunnel(
               appName: name.text.trim(),
@@ -718,9 +729,10 @@ class _Field extends StatelessWidget {
   }
 }
 
-Future<void> _showQuickAddDialog(BuildContext context, AppController controller) async {
+Future<void> _showQuickAddDialog(
+    BuildContext context, AppController controller) async {
   final codeController = TextEditingController();
-  
+
   await showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
@@ -741,7 +753,7 @@ Future<void> _showQuickAddDialog(BuildContext context, AppController controller)
             controller: codeController,
             decoration: const InputDecoration(
               labelText: '连接码',
-              hintText: '例如：1:abc123:25565:25565',
+              hintText: '1:0123456789abcdef:25565:25565',
               border: OutlineInputBorder(),
             ),
             maxLines: 3,
@@ -787,6 +799,6 @@ Future<void> _showQuickAddDialog(BuildContext context, AppController controller)
       ],
     ),
   );
-  
+
   codeController.dispose();
 }

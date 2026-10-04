@@ -32,7 +32,8 @@ class UpdateTile extends StatelessWidget {
             ? '当前：$installedVersion'
             : '未安装',
       ),
-      trailing: _buildTrailing(context, updateService, state, latestVersion, progress),
+      trailing: _buildTrailing(
+          context, updateService, state, latestVersion, progress),
     );
   }
 
@@ -70,6 +71,24 @@ class UpdateTile extends StatelessWidget {
           style: TextStyle(color: Colors.green, fontSize: 12),
         );
 
+      case UpdateState.installReady:
+        return TextButton(
+          onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => AlertDialog(
+                    title: const Text('更新已准备'),
+                    content: SelectableText(service.appInstallPath == null
+                        ? '请在系统安装器中完成安装。'
+                        : '请退出当前应用，从以下目录启动新版本：\n${service.appInstallPath}'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('关闭'))
+                    ],
+                  )),
+          child: const Text('查看安装位置'),
+        );
+
       case UpdateState.error:
         return TextButton(
           onPressed: () => _startDownload(context, service),
@@ -77,7 +96,7 @@ class UpdateTile extends StatelessWidget {
         );
 
       case UpdateState.idle:
-      default:
+        if (!service.supports(component)) return const Text('当前平台不支持在线安装');
         final installedVersion = service.getInstalledVersion(component);
         if (installedVersion == null || installedVersion.isEmpty) {
           return FilledButton(
@@ -92,7 +111,8 @@ class UpdateTile extends StatelessWidget {
     }
   }
 
-  Future<void> _startDownload(BuildContext context, UpdateService service) async {
+  Future<void> _startDownload(
+      BuildContext context, UpdateService service) async {
     final title = component == UpdateComponent.app
         ? '下载应用更新'
         : component == UpdateComponent.core
@@ -102,7 +122,8 @@ class UpdateTile extends StatelessWidget {
     await UpdateProgressDialog.show(
       context: context,
       title: title,
-      downloadTask: (onProgress) => service.downloadAndInstall(component, onProgress: onProgress),
+      downloadTask: (onProgress) =>
+          service.downloadAndInstall(component, onProgress: onProgress),
     );
   }
 

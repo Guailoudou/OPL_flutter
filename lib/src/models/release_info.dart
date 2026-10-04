@@ -1,4 +1,5 @@
-import 'dart:io';
+import '../core/platform_support.dart';
+import '../core/native_arch.dart';
 
 class ReleaseInfo {
   final AppReleaseInfo? app;
@@ -17,10 +18,12 @@ class ReleaseInfo {
           ? AppReleaseInfo.fromJson(appData)
           : null,
       core: coreData.map(
-        (k, v) => MapEntry(k, PlatformRelease.fromJson(v as Map<String, dynamic>)),
+        (k, v) =>
+            MapEntry(k, PlatformRelease.fromJson(v as Map<String, dynamic>)),
       ),
       easytier: easytierData.map(
-        (k, v) => MapEntry(k, PlatformRelease.fromJson(v as Map<String, dynamic>)),
+        (k, v) =>
+            MapEntry(k, PlatformRelease.fromJson(v as Map<String, dynamic>)),
       ),
     );
   }
@@ -35,15 +38,23 @@ class ReleaseInfo {
 
   PlatformRelease? _platformRelease(Map<String, PlatformRelease> map) {
     final platform = _currentPlatformKey();
-    return platform != null ? map[platform] : null;
+    return platform != null ? releaseForPlatform(map, platform) : null;
   }
 
   static String? _currentPlatformKey() {
-    if (Platform.isWindows) return 'windows';
-    if (Platform.isLinux) return 'linux';
-    if (Platform.isMacOS) return 'macos';
+    if (PlatformSupport.isWindows) return 'windows';
+    if (PlatformSupport.isLinux) return 'linux';
+    if (PlatformSupport.isMacOS) return 'macos';
+    if (PlatformSupport.isAndroid) return 'android';
+    if (PlatformSupport.isOhos) return 'ohos';
     return null;
   }
+}
+
+T? releaseForPlatform<T>(Map<String, T> map, String platform,
+    {String? architecture}) {
+  final arch = architecture ?? nativeArchitecture;
+  return map['$platform-$arch'] ?? map[platform];
 }
 
 class AppReleaseInfo {
@@ -74,8 +85,9 @@ class AppReleaseInfo {
     );
   }
 
-  String? urlForPlatform(String platform) => urls[platform];
-  String? hashForPlatform(String platform) => hashes[platform];
+  String? urlForPlatform(String platform) => releaseForPlatform(urls, platform);
+  String? hashForPlatform(String platform) =>
+      releaseForPlatform(hashes, platform);
 }
 
 class PlatformRelease {

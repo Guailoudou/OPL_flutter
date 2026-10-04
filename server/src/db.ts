@@ -25,6 +25,14 @@ export class JsonDB<T> {
   }
 
   write(data: T): void {
-    fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), 'utf-8');
+    const temporary = `${this.filePath}.tmp`;
+    try {
+      fs.writeFileSync(temporary, JSON.stringify(data, null, 2), { encoding: 'utf-8', flag: 'w' });
+      const fd = fs.openSync(temporary, 'r+');
+      try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+      fs.renameSync(temporary, this.filePath);
+    } finally {
+      if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+    }
   }
 }

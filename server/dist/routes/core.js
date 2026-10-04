@@ -2,113 +2,55 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const db_1 = require("../db");
+const validation_1 = require("../validation");
 const db = new db_1.JsonDB('releases.json');
 const router = (0, express_1.Router)();
-// GET /api/core - 获取所有平台核心信息
-router.get('/', (req, res) => {
+const groups = ['core', 'easytier'];
+router.get('/', (_req, res) => {
     const data = db.read();
-    res.json({
-        core: data.core,
-        easytier: data.easytier
-    });
+    res.json({ core: data.core ?? {}, easytier: data.easytier ?? {} });
 });
-// GET /api/core/:platform - 获取指定平台核心信息
 router.get('/:platform', (req, res) => {
     const platform = req.params.platform.toLowerCase();
-    const validPlatforms = ['windows', 'linux', 'macos'];
-    if (!validPlatforms.includes(platform)) {
-        return res.status(400).json({
-            success: false,
-            message: '无效的平台，支持: windows, linux, macos'
-        });
+    if (!validation_1.releasePlatforms.has(platform)) {
+        res.status(400).json({ success: false, message: '无效的平台' });
+        return;
     }
     const data = db.read();
-    const coreInfo = data.core[platform];
-    const easytierInfo = data.easytier[platform];
-    res.json({
-        platform,
-        core: coreInfo,
-        easytier: easytierInfo
-    });
+    res.json({ platform, core: data.core?.[platform], easytier: data.easytier?.[platform] });
 });
-// POST /api/core - 更新核心信息
-router.post('/', (req, res) => {
+// Authentication and complete document validation run before these handlers.
+router.post('/', (req, res, next) => {
     try {
-        const { core, easytier } = req.body;
         const data = db.read();
-        if (core) {
-            // 验证并更新 core 数据
-            for (const platform of ['windows', 'linux', 'macos']) {
-                if (core[platform]) {
-                    const platformData = core[platform];
-                    if (!platformData.version || !platformData.url || !platformData.hash) {
-                        return res.status(400).json({
-                            success: false,
-                            message: `${platform} 平台 core 数据不完整，需要 version, url, hash`
-                        });
-                    }
-                    data.core[platform] = platformData;
-                }
-            }
-        }
-        if (easytier) {
-            // 验证并更新 easytier 数据
-            for (const platform of ['windows', 'linux', 'macos']) {
-                if (easytier[platform]) {
-                    const platformData = easytier[platform];
-                    if (!platformData.version || !platformData.url || !platformData.hash) {
-                        return res.status(400).json({
-                            success: false,
-                            message: `${platform} 平台 easytier 数据不完整，需要 version, url, hash`
-                        });
-                    }
-                    data.easytier[platform] = platformData;
-                }
-            }
+        for (const group of groups) {
+            if (req.body[group] !== undefined)
+                data[group] = { ...data[group], ...req.body[group] };
         }
         db.write(data);
         res.json({ success: true, message: '核心信息已更新' });
     }
     catch (error) {
-        res.status(500).json({ success: false, message: '更新失败: ' + error });
+        next(error);
     }
 });
-// POST /api/core/:platform - 更新指定平台核心信息
-router.post('/:platform', (req, res) => {
+router.post('/:platform', (req, res, next) => {
     const platform = req.params.platform.toLowerCase();
-    const validPlatforms = ['windows', 'linux', 'macos'];
-    if (!validPlatforms.includes(platform)) {
-        return res.status(400).json({
-            success: false,
-            message: '无效的平台，支持: windows, linux, macos'
-        });
+    if (!validation_1.releasePlatforms.has(platform)) {
+        res.status(400).json({ success: false, message: '无效的平台' });
+        return;
     }
     try {
-        const { core, easytier } = req.body;
         const data = db.read();
-        if (core) {
-            if (!core.version || !core.url || !core.hash) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'core 数据不完整，需要 version, url, hash'
-                });
-            }
-            data.core[platform] = core;
-        }
-        if (easytier) {
-            if (!easytier.version || !easytier.url || !easytier.hash) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'easytier 数据不完整，需要 version, url, hash'
-                });
-            }
-            data.easytier[platform] = easytier;
+        for (const group of groups) {
+            if (req.body[group] !== undefined)
+                data[group] = { ...data[group], [platform]: req.body[group] };
         }
         db.write(data);
-        res.json({ success: true, message: `${platform} 平台核心信息已更新` });
+        res.json({ success: true, message: '核心信息已更新' });
     }
     catch (error) {
-        res.status(500).json({ success: false, message: '更新失败: ' + error });
+        next(error);
     }
 });
 exports.default = router;

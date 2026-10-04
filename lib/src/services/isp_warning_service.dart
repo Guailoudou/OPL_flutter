@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
@@ -76,7 +75,8 @@ class IspWarningService {
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
-        L.w('failed to fetch ISP info: HTTP ${response.statusCode}', tag: 'isp');
+        L.w('failed to fetch ISP info: HTTP ${response.statusCode}',
+            tag: 'isp');
         return null;
       }
 
@@ -88,7 +88,8 @@ class IspWarningService {
 
       final code = json['code'];
       if (code != null && code != 200) {
-        L.w('ISP API returned error code: $code, msg: ${json['msg']}', tag: 'isp');
+        L.w('ISP API returned error code: $code, msg: ${json['msg']}',
+            tag: 'isp');
         return null;
       }
 
@@ -112,7 +113,8 @@ class IspWarningService {
 
   bool isMainstreamIsp(String isp) {
     final ispLower = isp.toLowerCase();
-    return _mainstreamIsps.any((mainIsp) => ispLower.contains(mainIsp.toLowerCase()));
+    return _mainstreamIsps
+        .any((mainIsp) => ispLower.contains(mainIsp.toLowerCase()));
   }
 
   bool shouldShowWarning(String isp) {

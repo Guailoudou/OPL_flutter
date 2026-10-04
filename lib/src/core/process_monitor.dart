@@ -1,3 +1,4 @@
+import 'platform_support.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -24,7 +25,8 @@ class ProcessMonitor {
       onStatusChanged?.call(isAlive);
 
       if (!isAlive) {
-        L.w('Monitored process $_monitoredPid is no longer alive', tag: 'process_monitor');
+        L.w('Monitored process $_monitoredPid is no longer alive',
+            tag: 'process_monitor');
         stopMonitoring();
       }
     });
@@ -38,7 +40,7 @@ class ProcessMonitor {
 
   Future<bool> _isProcessAlive(int pid) async {
     try {
-      if (Platform.isWindows) {
+      if (PlatformSupport.isWindows) {
         final result = await Process.run(
           'tasklist',
           ['/FI', 'PID eq $pid'],

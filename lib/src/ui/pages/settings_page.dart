@@ -1,9 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/settings_models.dart';
+import '../../core/platform_support.dart';
 import '../../state/app_controller.dart';
 import '../../utils/logger.dart';
 import '../../services/isp_warning_service.dart';
@@ -14,21 +14,88 @@ import '../../widgets/update_tile.dart';
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
+  Future<void> _setKeepAlive(
+      BuildContext context, AppController controller, bool enabled,
+      {bool pictureInPicture = false}) async {
+    try {
+      await controller.setOhosKeepAlive(enabled,
+          pictureInPicture: pictureInPicture);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$error')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<AppController>();
     final themeMode = controller.settings.themeMode;
-    final coreVersion = controller.coreVersion ?? '未安装';
     final runInBackground = controller.settings.runInBackground;
     final askBeforeMinimize = controller.settings.askBeforeMinimize;
     final useGiteeMirror = controller.settings.useGiteeMirror;
+    final token = controller.config?.network.token;
 
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: ListView(
         children: [
+          ListTile(
+            leading: const Icon(Icons.key),
+            title: const Text('OpenP2P Token'),
+            subtitle: Text(
+              token == null || token == BigInt.zero
+                  ? '未设置'
+                  : '当前：${_maskToken(token.toString())}',
+            ),
+            trailing: TextButton(
+              onPressed: token == null
+                  ? null
+                  : () async {
+                      if (controller.coreRunning) {
+                        await _showTokenLockedDialog(context);
+                        return;
+                      }
+                      final updated = await _editTokenDialog(
+                        context,
+                        initial: token,
+                      );
+                      if (updated == null || !context.mounted) return;
+                      await controller.updateToken(updated);
+                      if (!context.mounted) return;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Token 已保存，请重新启动核心'),
+                          ),
+                        );
+                      });
+                    },
+              child: const Text('设置'),
+            ),
+          ),
+          const Divider(height: 1),
           // Gitee mirror setting
+          if (PlatformSupport.isOhos) ...[
+            SwitchListTile(
+              title: const Text('持续后台运行'),
+              subtitle: const Text('核心运行时申请持续后台任务；返回前台或停止核心后释放'),
+              value: controller.ohosBackgroundKeepAlive,
+              onChanged: (enabled) =>
+                  _setKeepAlive(context, controller, enabled),
+            ),
+            SwitchListTile(
+              title: const Text('画中画保活'),
+              subtitle: const Text('进入后台时显示小窗，需要设备支持画中画'),
+              value: controller.ohosPictureInPicture,
+              onChanged: (enabled) => _setKeepAlive(
+                  context, controller, enabled,
+                  pictureInPicture: true),
+            ),
+            const Divider(height: 1),
+          ],
           ListTile(
             leading: const Icon(Icons.cloud),
             title: const Text('启用 Gitee 镜像'),
@@ -47,7 +114,7 @@ class SettingsPage extends StatelessWidget {
           ),
           const Divider(height: 1),
           // Background run setting (Windows only)
-          if (Platform.isWindows) ...[
+          if (PlatformSupport.isWindows) ...[
             ListTile(
               leading: const Icon(Icons.minimize),
               title: const Text('关闭时最小化到托盘'),
@@ -58,14 +125,9 @@ class SettingsPage extends StatelessWidget {
                   L.d('runInBackground: $runInBackground -> $value',
                       tag: 'settings');
 
-                  await controller.settingsStore.save(
+                  await controller.updateSettings(
                     controller.settings.copyWith(runInBackground: value),
                   );
-
-                  // Update controller settings
-                  controller.settings =
-                      controller.settings.copyWith(runInBackground: value);
-                  controller.notifyListeners();
 
                   L.d('Updated to $value', tag: 'settings');
                 },
@@ -82,14 +144,9 @@ class SettingsPage extends StatelessWidget {
                   L.d('askBeforeMinimize: $askBeforeMinimize -> $value',
                       tag: 'settings');
 
-                  await controller.settingsStore.save(
+                  await controller.updateSettings(
                     controller.settings.copyWith(askBeforeMinimize: value),
                   );
-
-                  // Update controller settings
-                  controller.settings =
-                      controller.settings.copyWith(askBeforeMinimize: value);
-                  controller.notifyListeners();
 
                   L.d('Updated to $value', tag: 'settings');
                 },
@@ -125,7 +182,7 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          if (!Platform.isAndroid) ...[
+          if (PlatformSupport.isDesktop) ...[
             ListTile(
               leading: const Icon(Icons.power_settings_new),
               title: const Text('开机自启动'),
@@ -141,12 +198,9 @@ class SettingsPage extends StatelessWidget {
                     } else {
                       await controller.autoStartService.disable();
                     }
-                    await controller.settingsStore.save(
+                    await controller.updateSettings(
                       controller.settings.copyWith(autoStart: value),
                     );
-                    controller.settings =
-                        controller.settings.copyWith(autoStart: value);
-                    controller.notifyListeners();
                   } catch (e) {
                     L.e('设置开机自启动失败: $e', tag: 'settings');
                     if (context.mounted) {
@@ -165,7 +219,7 @@ class SettingsPage extends StatelessWidget {
             title: '应用版本',
             component: UpdateComponent.app,
           ),
-          if (!Platform.isAndroid) ...[
+          if (PlatformSupport.isDesktop) ...[
             const Divider(height: 1),
             UpdateTile(
               icon: Icons.memory,
@@ -250,7 +304,7 @@ class SettingsPage extends StatelessWidget {
               child: const Text('检测'),
             ),
           ),
-          if (Platform.isWindows) ...[
+          if (PlatformSupport.isWindows) ...[
             const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.security),
@@ -362,4 +416,130 @@ class SettingsPage extends StatelessWidget {
       ),
     );
   }
+}
+
+String _maskToken(String token) {
+  if (token.length <= 4) {
+    return '••••';
+  }
+  return '••••••••${token.substring(token.length - 4)}';
+}
+
+Future<BigInt?> _editTokenDialog(
+  BuildContext context, {
+  required BigInt initial,
+}) async {
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final route = DialogRoute<BigInt>(
+    context: context,
+    barrierDismissible: true,
+    builder: (_) => _TokenEditorDialog(initial: initial),
+  );
+  final result = await navigator.push<BigInt>(route);
+  await route.completed;
+  return result;
+}
+
+class _TokenEditorDialog extends StatefulWidget {
+  const _TokenEditorDialog({required this.initial});
+
+  final BigInt initial;
+
+  @override
+  State<_TokenEditorDialog> createState() => _TokenEditorDialogState();
+}
+
+class _TokenEditorDialogState extends State<_TokenEditorDialog> {
+  static final BigInt _maxUint64 = (BigInt.one << 64) - BigInt.one;
+
+  late final TextEditingController _controller;
+  bool _obscureText = true;
+  String? _validationError;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.initial == BigInt.zero ? '' : widget.initial.toString(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final value = BigInt.tryParse(_controller.text.trim());
+    if (value == null || value <= BigInt.zero || value > _maxUint64) {
+      setState(() {
+        _validationError = '请输入 1 到 18446744073709551615 之间的整数';
+      });
+      return;
+    }
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('设置 OpenP2P Token'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _controller,
+            obscureText: _obscureText,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onSubmitted: (_) => _save(),
+            decoration: InputDecoration(
+              labelText: 'Token（十进制 uint64）',
+              border: const OutlineInputBorder(),
+              errorText: _validationError,
+              suffixIcon: IconButton(
+                tooltip: _obscureText ? '显示 Token' : '隐藏 Token',
+                onPressed: () {
+                  setState(() => _obscureText = !_obscureText);
+                },
+                icon: Icon(
+                  _obscureText ? Icons.visibility : Icons.visibility_off,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text('Token 会写入应用沙箱中的 config.json，请勿截图或分享。'),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: _save,
+          child: const Text('保存'),
+        ),
+      ],
+    );
+  }
+}
+
+Future<void> _showTokenLockedDialog(BuildContext context) async {
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('无法修改 Token'),
+      content: const Text('核心运行期间不能修改 Token，请先停止核心。'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('确定'),
+        ),
+      ],
+    ),
+  );
 }

@@ -6,12 +6,14 @@
     "url": {
       "windows": "https://file.gldhn.top/file/releases/opl-0.1.1.exe",
       "linux": "https://file.gldhn.top/file/releases/opl-0.1.1.tar.gz",
-      "macos": "https://file.gldhn.top/file/releases/opl-0.1.1.dmg"
+      "macos": "https://file.gldhn.top/file/releases/opl-0.1.1.dmg",
+      "android": "https://file.gldhn.top/file/releases/opl-0.1.1.apk"
     },
     "hash": {
       "windows": "placeholder_hash",
       "linux": "placeholder_hash",
-      "macos": "placeholder_hash"
+      "macos": "placeholder_hash",
+      "android": "placeholder_hash"
     }
   },
   "core": {

@@ -1,9 +1,9 @@
+import 'platform_support.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import '../utils/logger.dart';
-import 'config_models.dart';
 
 class OpenP2PNetworkService {
   Process? _process;
@@ -152,7 +152,7 @@ class OpenP2PNetworkService {
   }
 
   String _getExecutablePath() {
-    if (Platform.isWindows) {
+    if (PlatformSupport.isWindows) {
       return 'openp2p.exe';
     } else {
       return 'openp2p';

@@ -39,6 +39,8 @@ class AppTheme {
   Map<String, dynamic> toJson() {
     return {
       'mode': mode.index,
+      // Retain compatibility with the OHOS Flutter SDK.
+      // ignore: deprecated_member_use
       'customColor': customColor?.value,
     };
   }
